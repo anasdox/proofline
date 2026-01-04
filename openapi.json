@@ -1546,34 +1546,10 @@
           {
             "apiKeyAuth": []
           }
-        ],
-        "parameters": [
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
         ]
       },
       "post": {
         "operationId": "create-project",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1682,16 +1658,6 @@
         "operationId": "delete-project",
         "parameters": [
           {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
-          {
             "in": "path",
             "name": "project_id",
             "required": true,
@@ -1785,16 +1751,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1862,16 +1818,6 @@
       "patch": {
         "operationId": "update-project",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -2043,16 +1989,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -2120,16 +2056,6 @@
       "post": {
         "operationId": "add-attestation",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -2253,16 +2179,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -2332,16 +2248,6 @@
       "post": {
         "operationId": "create-decision",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -2514,16 +2420,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -2618,16 +2514,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -2695,16 +2581,6 @@
       "post": {
         "operationId": "create-iteration",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -2821,16 +2697,6 @@
       "patch": {
         "operationId": "set-iteration-status",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -2964,16 +2830,6 @@
         "operationId": "whoami",
         "parameters": [
           {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
-          {
             "in": "path",
             "name": "project_id",
             "required": true,
@@ -3059,16 +2915,6 @@
       "post": {
         "operationId": "allow-attestation-role",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -3179,16 +3025,6 @@
         "operationId": "deny-attestation-role",
         "parameters": [
           {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
-          {
             "in": "path",
             "name": "project_id",
             "required": true,
@@ -3298,16 +3134,6 @@
         "operationId": "grant-role",
         "parameters": [
           {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
-          {
             "in": "path",
             "name": "project_id",
             "required": true,
@@ -3416,16 +3242,6 @@
       "post": {
         "operationId": "revoke-role",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -3542,16 +3358,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -3649,16 +3455,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -3726,16 +3522,6 @@
       "post": {
         "operationId": "create-task",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -3875,16 +3661,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -3972,16 +3748,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -4049,16 +3815,6 @@
       "patch": {
         "operationId": "update-task",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -4192,16 +3948,6 @@
         "operationId": "claim-task",
         "parameters": [
           {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
-          {
             "in": "path",
             "name": "project_id",
             "required": true,
@@ -4325,16 +4071,6 @@
       "post": {
         "operationId": "complete-task",
         "parameters": [
-          {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
           {
             "in": "path",
             "name": "project_id",
@@ -4468,16 +4204,6 @@
         "operationId": "release-task",
         "parameters": [
           {
-            "in": "header",
-            "name": "X-Actor-Id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "deprecated": true,
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present."
-          },
-          {
             "in": "path",
             "name": "project_id",
             "required": true,
@@ -4586,16 +4312,6 @@
             "in": "path",
             "name": "id",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Actor-Id",
-            "in": "header",
-            "description": "Deprecated; ignored when Authorization or X-Api-Key is present.",
-            "deprecated": true,
-            "required": false,
             "schema": {
               "type": "string"
             }

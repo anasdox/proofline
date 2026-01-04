@@ -74,8 +74,6 @@ class ProoflineClient:
             headers["Authorization"] = f"Bearer {self.access_token}"
         elif self.api_key:
             headers["X-Api-Key"] = self.api_key
-        elif self.actor_id:
-            headers["X-Actor-Id"] = self.actor_id
         data = json.dumps(body) if body is not None else None
         resp = self.session.request(method, url, data=data, headers=headers, timeout=self.timeout)
         if resp.status_code >= 300:

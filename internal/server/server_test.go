@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -41,8 +40,11 @@ type testServer struct {
 
 func (s *testServer) Client() *http.Client { return s.client }
 func (s *testServer) Close()               { s.close() }
-func (s *testServer) bearerToken(t *testing.T, actor string, expiresAt time.Time) string {
-	return signToken(t, s.jwtSecret, actor, expiresAt)
+func (s *testServer) bearerToken(t *testing.T, actor string, orgID string, expiresAt time.Time) string {
+	if orgID == "" {
+		orgID = "default-org"
+	}
+	return signToken(t, s.jwtSecret, actor, orgID, expiresAt)
 }
 
 func newTestServer(t *testing.T) (*testServer, func()) {
@@ -77,6 +79,7 @@ func newTestServerWithAuth(t *testing.T, authCfg AuthConfig) (*testServer, func(
 		jwtSecret = "test-secret"
 		authCfg.JWTSecret = jwtSecret
 	}
+	orgID := "default-org"
 	e := engine.New(conn, cfg)
 	if _, err := e.InitProject(context.Background(), cfg.Project.ID, "", "tester"); err != nil {
 		t.Fatalf("init project: %v", err)
@@ -88,6 +91,7 @@ func newTestServerWithAuth(t *testing.T, authCfg AuthConfig) (*testServer, func(
 	if err := e.Repo.InsertAPIKey(context.Background(), nil, domain.APIKey{
 		ID:      "test-key",
 		ActorID: "tester",
+		OrgID:   orgID,
 		KeyHash: repo.HashAPIKey(apiKeyValue),
 	}); err != nil {
 		t.Fatalf("insert api key: %v", err)
@@ -97,7 +101,7 @@ func newTestServerWithAuth(t *testing.T, authCfg AuthConfig) (*testServer, func(
 		t.Fatalf("build handler: %v", err)
 	}
 	ts := httptest.NewServer(handler)
-	defaultToken := signToken(t, jwtSecret, "tester", time.Now().Add(time.Hour))
+	defaultToken := signToken(t, jwtSecret, "tester", orgID, time.Now().Add(time.Hour))
 	clientAuth.Store(ts.Client(), authContext{bearerToken: defaultToken, apiKey: apiKeyValue})
 	testSrv := &testServer{
 		URL:       ts.URL,
@@ -126,7 +130,7 @@ func fetchOpenAPISpec(t *testing.T, srv *testServer) map[string]any {
 	return spec
 }
 
-func signToken(t *testing.T, secret, actorID string, expiresAt time.Time) string {
+func signToken(t *testing.T, secret, actorID, orgID string, expiresAt time.Time) string {
 	t.Helper()
 	now := time.Now()
 	claims := jwt.RegisteredClaims{
@@ -135,7 +139,12 @@ func signToken(t *testing.T, secret, actorID string, expiresAt time.Time) string
 		IssuedAt:  jwt.NewNumericDate(now),
 		NotBefore: jwt.NewNumericDate(now),
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	type extendedClaims struct {
+		jwt.RegisteredClaims
+		Org string `json:"org"`
+	}
+	ext := extendedClaims{RegisteredClaims: claims, Org: orgID}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ext)
 	signed, err := token.SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
@@ -222,7 +231,7 @@ func TestAuthBearerToken(t *testing.T) {
 	defer cleanup()
 	client := srv.Client()
 
-	token := srv.bearerToken(t, "jwt-user", time.Now().Add(time.Hour))
+token := srv.bearerToken(t, "jwt-user", "default-org", time.Now().Add(time.Hour))
 	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/proofline/me/permissions", nil, bearerHeader(token))
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("whoami via bearer: %d %s", res.StatusCode, string(data))
@@ -253,7 +262,7 @@ func TestAuthBearerInvalidAndExpired(t *testing.T) {
 		t.Fatalf("unexpected code %s", apiErr.Error.Code)
 	}
 
-	expired := srv.bearerToken(t, "jwt-user", time.Now().Add(-time.Hour))
+expired := srv.bearerToken(t, "jwt-user", "default-org", time.Now().Add(-time.Hour))
 	expRes, expBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, bearerHeader(expired))
 	if expRes.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expired token status %d: %s", expRes.StatusCode, string(expBody))
@@ -314,43 +323,6 @@ func TestAuthMissing(t *testing.T) {
 	healthRes, healthBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/health", nil, map[string]string{"Authorization": ""})
 	if healthRes.StatusCode != http.StatusOK {
 		t.Fatalf("health expected 200, got %d: %s", healthRes.StatusCode, string(healthBody))
-	}
-}
-
-func TestAuthLegacyHeader(t *testing.T) {
-	srv, cleanup := newTestServer(t)
-	defer cleanup()
-	client := srv.Client()
-
-	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, map[string]string{"X-Actor-Id": "legacy-user", "Authorization": ""})
-	if res.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("legacy without flag status %d: %s", res.StatusCode, string(data))
-	}
-	var apiErr struct {
-		Error apiErrorBody `json:"error"`
-	}
-	_ = json.Unmarshal(data, &apiErr)
-	if apiErr.Error.Code != "unauthorized" {
-		t.Fatalf("unexpected code %s", apiErr.Error.Code)
-	}
-
-	var buf bytes.Buffer
-	logger := log.New(&buf, "", 0)
-	srvLegacy, cleanupLegacy := newTestServerWithAuth(t, AuthConfig{JWTSecret: "test-secret", AllowLegacyActorHeader: true, Logger: logger})
-	defer cleanupLegacy()
-	res2, data2 := doJSON(t, srvLegacy.Client(), http.MethodGet, srvLegacy.URL+"/v0/projects/proofline/me/permissions", nil, map[string]string{"X-Actor-Id": "legacy-user", "Authorization": ""})
-	if res2.StatusCode != http.StatusOK {
-		t.Fatalf("legacy with flag status %d: %s", res2.StatusCode, string(data2))
-	}
-	var who struct {
-		ActorID string `json:"actor_id"`
-	}
-	_ = json.Unmarshal(data2, &who)
-	if who.ActorID != "legacy-user" {
-		t.Fatalf("expected legacy actor, got %s", who.ActorID)
-	}
-	if !strings.Contains(buf.String(), "legacy") {
-		t.Fatalf("expected legacy warning log, got %q", buf.String())
 	}
 }
 
@@ -645,7 +617,7 @@ func TestLeaseConflict(t *testing.T) {
 	if claim1.StatusCode != http.StatusOK {
 		t.Fatalf("first claim: %d %s", claim1.StatusCode, string(body1))
 	}
-	claim2Token := srv.bearerToken(t, "other", time.Now().Add(time.Hour))
+claim2Token := srv.bearerToken(t, "other", "default-org", time.Now().Add(time.Hour))
 	claim2, body2 := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+created.ID+"/claim", nil, bearerHeader(claim2Token))
 	if claim2.StatusCode != http.StatusConflict {
 		t.Fatalf("expected conflict, got %d %s", claim2.StatusCode, string(body2))
@@ -706,7 +678,7 @@ func TestUnauthorizedTaskCreate(t *testing.T) {
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Should fail",
 		"type":  "technical",
-	}, bearerHeader(srv.bearerToken(t, "intruder", time.Now().Add(time.Hour))))
+}, bearerHeader(srv.bearerToken(t, "intruder", "default-org", time.Now().Add(time.Hour))))
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", res.StatusCode, string(data))
 	}
@@ -752,7 +724,7 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 		"entity_kind": "task",
 		"entity_id":   task.ID,
 		"kind":        "security.ok",
-	}, bearerHeader(srv.bearerToken(t, "rev1", time.Now().Add(time.Hour))))
+}, bearerHeader(srv.bearerToken(t, "rev1", "default-org", time.Now().Add(time.Hour))))
 	if attRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", attRes.StatusCode, string(attData))
 	}
@@ -924,7 +896,7 @@ func TestRoleGrantAllowsClaim(t *testing.T) {
 		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
 	}
 
-	devToken := srv.bearerToken(t, "dev-1", time.Now().Add(time.Hour))
+devToken := srv.bearerToken(t, "dev-1", "default-org", time.Now().Add(time.Hour))
 	claimRes, claimData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/claim", nil, bearerHeader(devToken))
 	if claimRes.StatusCode != http.StatusOK {
 		t.Fatalf("claim failed: %d %s", claimRes.StatusCode, string(claimData))
@@ -957,7 +929,7 @@ func TestForceRequiresPermission(t *testing.T) {
 
 	doneRes, doneData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/done?force=true", map[string]any{
 		"work_proof": map[string]any{"note": "force"},
-	}, bearerHeader(srv.bearerToken(t, "force-dev", time.Now().Add(time.Hour))))
+}, bearerHeader(srv.bearerToken(t, "force-dev", "default-org", time.Now().Add(time.Hour))))
 	if doneRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", doneRes.StatusCode, string(doneData))
 	}

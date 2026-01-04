@@ -1,9 +1,9 @@
-Proofline CLI (`pl`)
+Proofline
 ====================
 
 Why Proofline?
 --------------
-LLM agents that manage projects through text alone easily lose structure and context; Proofline gives them a typed API for tasks, iterations, attestations, and policies so they can read/write state safely instead of scraping checklists.
+AI agents that manage projects through text alone easily lose structure and context; Proofline gives them a typed API for tasks, iterations, attestations, and policies so they can read/write state safely instead of scraping checklists.
 Too often, “done” is just a checkbox: tasks get marked complete without proof, policies are tribal knowledge, and quality gates are easy to forget. Proofline makes “done” and “ready” explicit by attaching attestations (proof) and enforcing policies automatically. It keeps evidence, rules, and history in one place so teams—and agents—ship with confidence instead of guesswork.
 
 
@@ -81,7 +81,7 @@ HTTP API
 - Start server: `pl serve --addr 127.0.0.1:8080 --base-path /v0`.
 - Base paths are project-scoped: `/v0/projects/{project_id}/tasks`, `/iterations`, `/attestations`, `/events`, `/status`. Projects: `POST/GET /v0/projects`, `GET/PATCH/DELETE /v0/projects/{project_id}`.
 - OpenAPI spec: `http://127.0.0.1:8080/openapi.json`; Swagger UI: `http://127.0.0.1:8080/docs` (loads the generated spec, no static file).
-- Authentication: use `Authorization: Bearer <JWT>` for humans or `X-Api-Key` for automation. `X-Actor-Id` is deprecated and ignored when auth headers are present (only honored if `ALLOW_LEGACY_ACTOR_HEADER=true`).
+- Authentication: use `Authorization: Bearer <JWT>` for humans or `X-Api-Key` for automation. Legacy `X-Actor-Id` headers are no longer accepted.
 - Auth: none for v0; intended for local/agent use. Add auth before exposing beyond localhost.
 
 SDKs

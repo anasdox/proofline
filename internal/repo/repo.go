@@ -22,7 +22,7 @@ var ErrNotFound = errors.New("not found")
 func scanProject(row *sql.Row) (domain.Project, error) {
 	var p domain.Project
 	var desc sql.NullString
-	err := row.Scan(&p.ID, &p.Kind, &p.Status, &desc, &p.CreatedAt)
+	err := row.Scan(&p.ID, &p.OrgID, &p.Kind, &p.Status, &desc, &p.CreatedAt)
 	if err == sql.ErrNoRows {
 		return p, ErrNotFound
 	}
@@ -33,17 +33,17 @@ func scanProject(row *sql.Row) (domain.Project, error) {
 }
 
 func (r Repo) InsertProject(ctx context.Context, p domain.Project) error {
-	_, err := r.DB.ExecContext(ctx, `INSERT INTO projects(id,kind,status,description,created_at) VALUES (?,?,?,?,?)`,
-		p.ID, p.Kind, p.Status, nullable(p.Description), p.CreatedAt)
+	_, err := r.DB.ExecContext(ctx, `INSERT INTO projects(id,org_id,kind,status,description,created_at) VALUES (?,?,?,?,?,?)`,
+		p.ID, p.OrgID, p.Kind, p.Status, nullable(p.Description), p.CreatedAt)
 	return err
 }
 
 func (r Repo) GetProject(ctx context.Context, id string) (domain.Project, error) {
-	return scanProject(r.DB.QueryRowContext(ctx, `SELECT id,kind,status,COALESCE(description,'') AS description,created_at FROM projects WHERE id=?`, id))
+	return scanProject(r.DB.QueryRowContext(ctx, `SELECT id,org_id,kind,status,COALESCE(description,'') AS description,created_at FROM projects WHERE id=?`, id))
 }
 
 func (r Repo) SingleProject(ctx context.Context) (domain.Project, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT id,kind,status,COALESCE(description,'') AS description,created_at FROM projects`)
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,org_id,kind,status,COALESCE(description,'') AS description,created_at FROM projects`)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -51,7 +51,7 @@ func (r Repo) SingleProject(ctx context.Context) (domain.Project, error) {
 	var projects []domain.Project
 	for rows.Next() {
 		var p domain.Project
-		if err := rows.Scan(&p.ID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.OrgID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt); err != nil {
 			return domain.Project{}, err
 		}
 		projects = append(projects, p)
@@ -66,7 +66,7 @@ func (r Repo) SingleProject(ctx context.Context) (domain.Project, error) {
 }
 
 func (r Repo) ListProjects(ctx context.Context) ([]domain.Project, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT id,kind,status,COALESCE(description,'') AS description,created_at FROM projects ORDER BY created_at DESC`)
+	rows, err := r.DB.QueryContext(ctx, `SELECT id,org_id,kind,status,COALESCE(description,'') AS description,created_at FROM projects ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (r Repo) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	var res []domain.Project
 	for rows.Next() {
 		var p domain.Project
-		if err := rows.Scan(&p.ID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.OrgID, &p.Kind, &p.Status, &p.Description, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		res = append(res, p)
@@ -83,8 +83,8 @@ func (r Repo) ListProjects(ctx context.Context) ([]domain.Project, error) {
 }
 
 func (r Repo) InsertIteration(ctx context.Context, it domain.Iteration) error {
-	_, err := r.DB.ExecContext(ctx, `INSERT INTO iterations(id,project_id,goal,status,created_at) VALUES (?,?,?,?,?)`,
-		it.ID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
+	_, err := r.DB.ExecContext(ctx, `INSERT INTO iterations(id,org_id,project_id,goal,status,created_at) VALUES (?,?,?,?,?,?)`,
+		it.ID, it.OrgID, it.ProjectID, it.Goal, it.Status, it.CreatedAt)
 	return err
 }
 

@@ -101,6 +101,8 @@ func New(cfg Config) (http.Handler, error) {
 	registerAttestations(group, cfg.Engine)
 	registerEvents(group, cfg.Engine)
 	registerRBAC(group, cfg.Engine)
+	registerMe(group, cfg.Engine)
+	registerDevAuth(group, cfg.Engine, cfg.Auth)
 	registerOpenAPI(router, api, basePath)
 
 	return router, nil
@@ -261,12 +263,6 @@ func applyAuthSecurity(oas *huma.OpenAPI, basePath string) {
 				continue
 			}
 			op.Security = security
-			op.Parameters = append(op.Parameters, &huma.Param{
-				Name:        "X-Actor-Id",
-				In:          "header",
-				Description: "Deprecated; ignored when Authorization or X-Api-Key is present.",
-				Deprecated:  true,
-			})
 		}
 	}
 }
@@ -293,7 +289,7 @@ func swaggerHTML(basePath string) string {
       };
     </script>
     <p style="padding: 1rem; font-family: sans-serif; color: #444;">
-      Authenticate with Authorization: Bearer &lt;token&gt; or X-Api-Key. X-Actor-Id is deprecated and ignored when auth headers are present.
+      Authenticate with Authorization: Bearer &lt;token&gt; or X-Api-Key.
     </p>
   </body>
 </html>`, specURL)
@@ -881,7 +877,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 		}
 		return &struct {
 			Body LeaseResponse `json:"body"`
-		}{Body: LeaseResponse(lease)}, nil
+		}{Body: leaseResponse(lease)}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -1358,12 +1354,12 @@ func registerRBAC(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body WhoAmIResponse `json:"body"`
 	}, error) {
-		actorID, authErr := actorIDFromContext(ctx)
+		principal, authErr := principalFromRequest(ctx)
 		if authErr != nil {
 			return nil, authErr
 		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
-		who, err := e.WhoAmI(ctx, projectID, actorID)
+		who, err := e.WhoAmI(ctx, projectID, principal.ActorID)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1371,6 +1367,7 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			Body WhoAmIResponse `json:"body"`
 		}{Body: WhoAmIResponse{
 			ActorID:     who.ActorID,
+			OrgID:       principal.OrgID,
 			Roles:       nonNilSlice(who.Roles),
 			Permissions: nonNilSlice(who.Permissions),
 		}}, nil
@@ -1486,6 +1483,76 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			return nil, handleError(err)
 		}
 		return &struct{}{}, nil
+	})
+}
+
+func registerMe(api huma.API, e engine.Engine) {
+	huma.Register(api, huma.Operation{
+		OperationID: "me",
+		Method:      http.MethodGet,
+		Path:        "/me",
+		Summary:     "Current principal",
+		Errors: []int{
+			http.StatusUnauthorized,
+		},
+	}, func(ctx context.Context, _ *struct{}) (*struct {
+		Body WhoAmIResponse `json:"body"`
+	}, error) {
+		principal, authErr := principalFromRequest(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		roles := principal.Roles
+		perms := principal.Permissions
+		if len(perms) == 0 && e.Config != nil {
+			if who, err := e.WhoAmI(ctx, e.Config.Project.ID, principal.ActorID); err == nil {
+				if len(roles) == 0 {
+					roles = who.Roles
+				}
+				perms = who.Permissions
+			}
+		}
+		return &struct {
+			Body WhoAmIResponse `json:"body"`
+		}{Body: WhoAmIResponse{
+			ActorID:     principal.ActorID,
+			OrgID:       principal.OrgID,
+			Roles:       nonNilSlice(roles),
+			Permissions: nonNilSlice(perms),
+		}}, nil
+	})
+}
+
+func registerDevAuth(api huma.API, e engine.Engine, authCfg AuthConfig) {
+	huma.Register(api, huma.Operation{
+		OperationID: "dev-login",
+		Method:      http.MethodPost,
+		Path:        "/auth/dev/login",
+		Summary:     "DEV ONLY: mint a JWT for local testing",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusInternalServerError,
+		},
+	}, func(ctx context.Context, input *struct {
+		Body DevLoginRequest `json:"body"`
+	}) (*struct {
+		Body DevLoginResponse `json:"body"`
+	}, error) {
+		if len(bodyBytes(ctx)) == 0 {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		actor := strings.TrimSpace(input.Body.ActorID)
+		org := strings.TrimSpace(input.Body.OrgID)
+		if actor == "" || org == "" {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "actor_id and org_id are required", nil)
+		}
+		token, err := signDevToken(authCfg.JWTSecret, actor, org, input.Body.Roles, input.Body.Scopes)
+		if err != nil {
+			return nil, newAPIError(http.StatusInternalServerError, "internal_error", err.Error(), nil)
+		}
+		return &struct {
+			Body DevLoginResponse `json:"body"`
+		}{Body: DevLoginResponse{Token: token}}, nil
 	})
 }
 

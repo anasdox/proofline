@@ -90,6 +90,7 @@ type CreateAttestationRequest struct {
 
 type ProjectResponse struct {
 	ID          string `json:"id"`
+	OrgID       string `json:"org_id"`
 	Kind        string `json:"kind"`
 	Status      string `json:"status"`
 	Description string `json:"description,omitempty"`
@@ -98,6 +99,7 @@ type ProjectResponse struct {
 
 type IterationResponse struct {
 	ID        string `json:"id"`
+	OrgID     string `json:"org_id"`
 	ProjectID string `json:"project_id"`
 	Goal      string `json:"goal"`
 	Status    string `json:"status" enum:"pending,running,delivered,validated,rejected"`
@@ -106,6 +108,7 @@ type IterationResponse struct {
 
 type TaskResponse struct {
 	ID                   string         `json:"id" example:"task-auth-1"`
+	OrgID                string         `json:"org_id" example:"org-1"`
 	ProjectID            string         `json:"project_id" example:"proofline"`
 	IterationID          *string        `json:"iteration_id,omitempty" example:"iter-1"`
 	ParentID             *string        `json:"parent_id,omitempty" example:"task-epic"`
@@ -126,6 +129,7 @@ type TaskResponse struct {
 
 type DecisionResponse struct {
 	ID           string         `json:"id"`
+	OrgID        string         `json:"org_id"`
 	ProjectID    string         `json:"project_id"`
 	Title        string         `json:"title"`
 	Decision     string         `json:"decision"`
@@ -145,6 +149,7 @@ type LeaseResponse struct {
 
 type AttestationResponse struct {
 	ID         string         `json:"id"`
+	OrgID      string         `json:"org_id"`
 	ProjectID  string         `json:"project_id"`
 	EntityKind string         `json:"entity_kind" enum:"project,iteration,task,decision"`
 	EntityID   string         `json:"entity_id"`
@@ -156,6 +161,7 @@ type AttestationResponse struct {
 
 type EventResponse struct {
 	ID         int64          `json:"id"`
+	OrgID      string         `json:"org_id"`
 	TS         string         `json:"ts" format:"date-time"`
 	Type       string         `json:"type"`
 	ProjectID  string         `json:"project_id,omitempty"`
@@ -241,18 +247,44 @@ type AttestationAuthorityRequest struct {
 
 type WhoAmIResponse struct {
 	ActorID     string   `json:"actor_id"`
+	OrgID       string   `json:"org_id"`
 	Roles       []string `json:"roles"`
 	Permissions []string `json:"permissions"`
+}
+
+type DevLoginRequest struct {
+	ActorID string   `json:"actor_id"`
+	OrgID   string   `json:"org_id"`
+	Roles   []string `json:"roles,omitempty"`
+	Scopes  []string `json:"scopes,omitempty"`
+}
+
+type DevLoginResponse struct {
+	Token string `json:"token"`
 }
 
 // Conversion helpers
 
 func projectResponse(p domain.Project) ProjectResponse {
-	return ProjectResponse(p)
+	return ProjectResponse{
+		ID:          p.ID,
+		OrgID:       p.OrgID,
+		Kind:        p.Kind,
+		Status:      p.Status,
+		Description: p.Description,
+		CreatedAt:   p.CreatedAt,
+	}
 }
 
 func iterationResponse(it domain.Iteration) IterationResponse {
-	return IterationResponse(it)
+	return IterationResponse{
+		ID:        it.ID,
+		OrgID:     it.OrgID,
+		ProjectID: it.ProjectID,
+		Goal:      it.Goal,
+		Status:    it.Status,
+		CreatedAt: it.CreatedAt,
+	}
 }
 
 func taskResponse(t domain.Task) TaskResponse {
@@ -260,6 +292,7 @@ func taskResponse(t domain.Task) TaskResponse {
 	wp := decodeJSONMap(t.WorkProofJSON)
 	return TaskResponse{
 		ID:                   t.ID,
+		OrgID:                t.OrgID,
 		ProjectID:            t.ProjectID,
 		IterationID:          t.IterationID,
 		ParentID:             t.ParentID,
@@ -282,6 +315,7 @@ func taskResponse(t domain.Task) TaskResponse {
 func decisionResponse(d domain.Decision) DecisionResponse {
 	return DecisionResponse{
 		ID:           d.ID,
+		OrgID:        d.OrgID,
 		ProjectID:    d.ProjectID,
 		Title:        d.Title,
 		Decision:     d.Decision,
@@ -296,6 +330,7 @@ func decisionResponse(d domain.Decision) DecisionResponse {
 func attestationResponse(a domain.Attestation) AttestationResponse {
 	return AttestationResponse{
 		ID:         a.ID,
+		OrgID:      a.OrgID,
 		ProjectID:  a.ProjectID,
 		EntityKind: a.EntityKind,
 		EntityID:   a.EntityID,
@@ -309,6 +344,7 @@ func attestationResponse(a domain.Attestation) AttestationResponse {
 func eventResponse(e domain.Event) EventResponse {
 	return EventResponse{
 		ID:         e.ID,
+		OrgID:      e.OrgID,
 		TS:         e.TS,
 		Type:       e.Type,
 		ProjectID:  e.ProjectID,
@@ -316,6 +352,15 @@ func eventResponse(e domain.Event) EventResponse {
 		EntityID:   e.EntityID,
 		ActorID:    e.ActorID,
 		Payload:    decodeJSONMap(strPtr(e.Payload)),
+	}
+}
+
+func leaseResponse(l domain.Lease) LeaseResponse {
+	return LeaseResponse{
+		TaskID:     l.TaskID,
+		OwnerID:    l.OwnerID,
+		AcquiredAt: l.AcquiredAt,
+		ExpiresAt:  l.ExpiresAt,
 	}
 }
 
