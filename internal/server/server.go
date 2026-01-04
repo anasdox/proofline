@@ -268,6 +268,67 @@ func registerProjects(api huma.API, e engine.Engine) {
 			Body []domain.Project `json:"body"`
 		}{Body: items}, nil
 	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-project",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}",
+		Summary:     "Get project",
+	}, func(ctx context.Context, input *struct {
+		ProjectID string `path:"project_id"`
+	}) (*struct {
+		Body domain.Project `json:"body"`
+	}, error) {
+		p, err := e.Repo.GetProject(ctx, input.ProjectID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body domain.Project `json:"body"`
+		}{Body: p}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "update-project",
+		Method:      http.MethodPatch,
+		Path:        "/projects/{project_id}",
+		Summary:     "Update project",
+	}, func(ctx context.Context, input *struct {
+		ActorID   string `header:"X-Actor-Id" default:"local-user"`
+		ProjectID string `path:"project_id"`
+		Body      struct {
+			Status      string  `json:"status,omitempty"`
+			Description *string `json:"description,omitempty"`
+		} `json:"body"`
+	}) (*struct {
+		Body domain.Project `json:"body"`
+	}, error) {
+		if err := e.Repo.UpdateProject(ctx, input.ProjectID, input.Body.Status, input.Body.Description); err != nil {
+			return nil, handleError(err)
+		}
+		p, err := e.Repo.GetProject(ctx, input.ProjectID)
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body domain.Project `json:"body"`
+		}{Body: p}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-project",
+		Method:      http.MethodDelete,
+		Path:        "/projects/{project_id}",
+		Summary:     "Delete project",
+	}, func(ctx context.Context, input *struct {
+		ActorID   string `header:"X-Actor-Id" default:"local-user"`
+		ProjectID string `path:"project_id"`
+	}) (*struct{}, error) {
+		if err := e.Repo.DeleteProject(ctx, input.ProjectID); err != nil {
+			return nil, handleError(err)
+		}
+		return &struct{}{}, nil
+	})
 }
 
 func registerTasks(api huma.API, e engine.Engine) {

@@ -37,6 +37,7 @@ Configuration
 - Project configs live in the DB. If no config exists for a project, a default is auto-seeded.
 - You can import overrides from a YAML file: `pl project config import --file .proofline/proofline.yml`.
 - Inspect/validate: `pl config show` and `pl config validate` (or `--json`).
+- Project selection: `--project` overrides; else config file project_id if present; else the single project in DB. Config seeding happens only when the project has no stored config.
 - Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit validation flags (`--validation-mode`, `--require`, `--threshold`), which emit `policy.override`.
 - Iteration validation uses `policies.defaults.iteration.validation.require`; missing value means no attestation is required.
 
@@ -72,9 +73,71 @@ Common Commands
 HTTP API
 --------
 - Start server: `pl serve --addr 127.0.0.1:8080 --base-path /v0`.
+- Base paths are project-scoped: `/v0/projects/{project_id}/tasks`, `/iterations`, `/attestations`, `/events`, `/status`. Projects: `POST/GET /v0/projects`, `GET/PATCH/DELETE /v0/projects/{project_id}`.
 - OpenAPI spec: `http://127.0.0.1:8080/openapi.json`; Swagger UI: `http://127.0.0.1:8080/docs` (loads the generated spec, no static file).
 - Actor header: send `X-Actor-Id` (defaults to `local-user` if omitted).
 - Auth: none for v0; intended for local/agent use. Add auth before exposing beyond localhost.
+
+SDKs
+----
+- Go: see `sdk/go` (package `prooflinesdk`). Quick start:
+  ```go
+  c := prooflinesdk.New("http://127.0.0.1:8080", "myproj")
+  task, _ := c.CreateTask(context.Background(), "Ship feature", "feature")
+  _, _ = c.AddAttestation(context.Background(), "task", task.ID, "ci.passed", nil)
+  events, _ := c.Events(context.Background(), 10)
+  fmt.Println("latest event", events[0].Type)
+  ```
+- Python: see `sdk/python/proofline.py`. Quick start:
+  ```python
+  from proofline import ProoflineClient
+  c = ProoflineClient("http://127.0.0.1:8080", "myproj")
+  task = c.create_task("Ship feature", "feature")
+  c.add_attestation("task", task.id, "ci.passed")
+  print(c.events(5)[0])
+  ```
+
+Agents (LangGraph / Autogen)
+----------------------------
+- LangGraph (Python) integration sketch:
+  ```python
+  from langgraph.graph import StateGraph
+  from proofline import ProoflineClient
+
+  client = ProoflineClient("http://127.0.0.1:8080", "myproj")
+
+  def create_and_mark_done(state):
+      task = client.create_task(state["title"], "feature")
+      client.add_attestation("task", task.id, "ci.passed")
+      client.add_attestation("task", task.id, "review.approved")
+      return {"task_id": task.id}
+
+  graph = StateGraph(dict)
+  graph.add_node("do_work", create_and_mark_done)
+  graph.set_entry_point("do_work")
+  result = graph.compile()({"title": "Ship feature"})
+  print(result)
+  ```
+- Autogen (Python) integration sketch:
+  ```python
+  from autogen import AssistantAgent, UserProxyAgent
+  from proofline import ProoflineClient
+
+  client = ProoflineClient("http://127.0.0.1:8080", "myproj")
+
+  assistant = AssistantAgent("assistant")
+  user = UserProxyAgent("user", human_input_mode="NEVER")
+
+  def add_task(title):
+      task = client.create_task(title, "feature")
+      client.add_attestation("task", task.id, "ci.passed")
+      return f"created {task.id}"
+
+  assistant.register_function(add_task, name="add_task", description="Create a task in Proofline")
+  user_message = "Add a task to ship login"
+  reply = assistant.run(user_proxy=user, prompt=user_message)
+  print(reply)
+  ```
 
 Events and Policies
 -------------------
@@ -88,3 +151,7 @@ Run `go test ./...` (use `GOMODCACHE`/`GOCACHE` env vars if needed for sandboxed
 Contributing
 ------------
 See `CONTRIBUTING.md` for coding standards, testing expectations, and PR checklist.
+
+Notes
+-----
+- SDKs call the HTTP API; ensure `pl serve` is running and `--project` points to the right project. If you use a different base path, adjust `base_url` accordingly.
