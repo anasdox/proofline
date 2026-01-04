@@ -798,7 +798,7 @@ func (e Engine) ClaimLease(ctx context.Context, taskID, actorID string, leaseSec
 	if err := e.Repo.UpsertLease(ctx, tx, newLease); err != nil {
 		return domain.Lease{}, err
 	}
-	if err := e.Events.Append(ctx, tx, "lease.claimed", t.ProjectID, "lease", taskID, actorID, events.EventPayload{"expires_at": newLease.ExpiresAt}); err != nil {
+	if err := e.Events.Append(ctx, tx, "lease.claimed", t.ProjectID, "task", taskID, actorID, events.EventPayload{"expires_at": newLease.ExpiresAt}); err != nil {
 		return domain.Lease{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -826,7 +826,7 @@ func (e Engine) ReleaseLease(ctx context.Context, taskID, actorID string) error 
 	if err := e.Repo.DeleteLease(ctx, tx, taskID); err != nil {
 		return err
 	}
-	if err := e.Events.Append(ctx, tx, "lease.released", t.ProjectID, "lease", taskID, actorID, events.EventPayload{}); err != nil {
+	if err := e.Events.Append(ctx, tx, "lease.released", t.ProjectID, "task", taskID, actorID, events.EventPayload{}); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -1024,7 +1024,11 @@ func (e Engine) AddAttestation(ctx context.Context, att domain.Attestation, acto
 	if err := e.Repo.InsertAttestationTx(ctx, tx, att); err != nil {
 		return att, err
 	}
-	if err := e.Events.Append(ctx, tx, "attestation.added", att.ProjectID, "attestation", att.ID, actorID, events.EventPayload{"kind": att.Kind, "entity": att.EntityID}); err != nil {
+	if err := e.Events.Append(ctx, tx, "attestation.added", att.ProjectID, att.EntityKind, att.EntityID, actorID, events.EventPayload{
+		"kind":           att.Kind,
+		"entity":         att.EntityID,
+		"attestation_id": att.ID,
+	}); err != nil {
 		return att, err
 	}
 	if err := tx.Commit(); err != nil {

@@ -30,9 +30,9 @@ type Config struct {
 }
 
 type apiErrorBody struct {
-	Code    string         `json:"code"`
-	Message string         `json:"message"`
-	Details map[string]any `json:"details,omitempty" jsonschema:"type=object,additionalProperties=true"`
+	Code    string         `json:"code" example:"forbidden_attestation_kind"`
+	Message string         `json:"message" example:"actor cannot attest to this kind"`
+	Details map[string]any `json:"details,omitempty" jsonschema:"type=object,additionalProperties=true" example:"{\"kind\":\"security.ok\"}"`
 }
 
 type requestKey struct{}
@@ -53,6 +53,7 @@ func New(cfg Config) (http.Handler, error) {
 	if basePath == "" {
 		basePath = "/v0"
 	}
+	huma.DefaultArrayNullable = false
 	// Override Huma errors to use the requested envelope.
 	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
 		return newAPIError(status, "", msg, nil)
@@ -79,7 +80,7 @@ func New(cfg Config) (http.Handler, error) {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})
-	hcfg := huma.DefaultConfig("Proofline API", "0.1.0")
+	hcfg := huma.DefaultConfig("Proofline API", "0.1.1")
 	hcfg.OpenAPIPath = "/openapi"
 	hcfg.DocsPath = "" // custom Swagger UI below
 	api := humachi.New(router, hcfg)
@@ -271,6 +272,12 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Path:          "/projects",
 		Summary:       "Create project",
 		DefaultStatus: http.StatusCreated,
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusConflict,
+			http.StatusInternalServerError,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID string               `header:"X-Actor-Id" required:"true"`
 		Body    CreateProjectRequest `json:"body"`
@@ -304,6 +311,7 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects",
 		Summary:     "List projects",
+		Errors:      []int{http.StatusBadRequest},
 	}, func(ctx context.Context, _ *struct{}) (*struct {
 		Body []ProjectResponse `json:"body"`
 	}, error) {
@@ -321,6 +329,7 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}",
 		Summary:     "Get project",
+		Errors:      []int{http.StatusNotFound},
 	}, func(ctx context.Context, input *struct {
 		ProjectID string `path:"project_id"`
 	}) (*struct {
@@ -340,6 +349,11 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Method:      http.MethodPatch,
 		Path:        "/projects/{project_id}",
 		Summary:     "Update project",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
@@ -370,6 +384,10 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Method:      http.MethodDelete,
 		Path:        "/projects/{project_id}",
 		Summary:     "Delete project",
+		Errors: []int{
+			http.StatusForbidden,
+			http.StatusNotFound,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
@@ -385,6 +403,7 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/config",
 		Summary:     "Get project config",
+		Errors:      []int{http.StatusNotFound},
 	}, func(ctx context.Context, input *struct {
 		ProjectID string `path:"project_id"`
 	}) (*struct {
@@ -407,6 +426,13 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Path:          "/projects/{project_id}/tasks",
 		Summary:       "Create task",
 		DefaultStatus: http.StatusCreated,
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
@@ -480,6 +506,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/tasks",
 		Summary:     "List tasks",
+		Errors:      []int{http.StatusBadRequest},
 	}, func(ctx context.Context, input *struct {
 		ProjectID   string `path:"project_id"`
 		Status      string `query:"status"`
@@ -526,6 +553,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/tasks/{id}",
 		Summary:     "Get task",
+		Errors:      []int{http.StatusNotFound},
 	}, func(ctx context.Context, input *struct {
 		ProjectID string `path:"project_id"`
 		ID        string `path:"id"`
@@ -549,6 +577,13 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Method:      http.MethodPatch,
 		Path:        "/projects/{project_id}/tasks/{id}",
 		Summary:     "Update task",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
@@ -640,6 +675,13 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Method:      http.MethodPost,
 		Path:        "/projects/{project_id}/tasks/{id}/done",
 		Summary:     "Complete task",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string              `header:"X-Actor-Id" required:"true"`
 		ProjectID string              `path:"project_id"`
@@ -677,6 +719,12 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Method:      http.MethodPost,
 		Path:        "/projects/{project_id}/tasks/{id}/claim",
 		Summary:     "Claim task lease",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID      string `header:"X-Actor-Id" required:"true"`
 		ProjectID    string `path:"project_id"`
@@ -706,6 +754,11 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Method:      http.MethodPost,
 		Path:        "/projects/{project_id}/tasks/{id}/release",
 		Summary:     "Release task lease",
+		Errors: []int{
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
@@ -731,13 +784,14 @@ func registerTasks(api huma.API, e engine.Engine) {
 	}
 	type treeNode struct {
 		Task     TaskResponse `json:"task"`
-		Children []treeNode   `json:"children,omitempty"`
+		Children []treeNode   `json:"children"`
 	}
 	huma.Register(api, huma.Operation{
 		OperationID: "task-tree",
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/tasks/tree",
 		Summary:     "Task tree",
+		Errors:      []int{http.StatusBadRequest},
 	}, func(ctx context.Context, input *treeInput) (*struct {
 		Body []treeNode `json:"body"`
 	}, error) {
@@ -756,13 +810,13 @@ func registerTasks(api huma.API, e engine.Engine) {
 		}
 		var build func(domain.Task) treeNode
 		build = func(t domain.Task) treeNode {
-			var kid []treeNode
+			kid := []treeNode{}
 			for _, c := range children[t.ID] {
 				kid = append(kid, build(c))
 			}
 			return treeNode{Task: taskResponse(t), Children: kid}
 		}
-		var res []treeNode
+		res := []treeNode{}
 		for _, r := range roots {
 			res = append(res, build(r))
 		}
@@ -776,6 +830,10 @@ func registerTasks(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/tasks/{id}/validation",
 		Summary:     "Task validation status",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusNotFound,
+		},
 	}, func(ctx context.Context, input *struct {
 		ProjectID string `path:"project_id"`
 		ID        string `path:"id"`
@@ -806,6 +864,12 @@ func registerIterations(api huma.API, e engine.Engine) {
 		Path:          "/projects/{project_id}/iterations",
 		Summary:       "Create iteration",
 		DefaultStatus: http.StatusCreated,
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusInternalServerError,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                 `header:"X-Actor-Id" required:"true"`
 		ProjectID string                 `path:"project_id"`
@@ -839,6 +903,7 @@ func registerIterations(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/iterations",
 		Summary:     "List iterations",
+		Errors:      []int{http.StatusBadRequest},
 	}, func(ctx context.Context, input *struct {
 		ProjectID string `path:"project_id"`
 		Limit     int    `query:"limit" default:"50"`
@@ -873,6 +938,12 @@ func registerIterations(api huma.API, e engine.Engine) {
 		Method:      http.MethodPatch,
 		Path:        "/projects/{project_id}/iterations/{id}/status",
 		Summary:     "Update iteration status",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusUnprocessableEntity,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                    `header:"X-Actor-Id" required:"true"`
 		ProjectID string                    `path:"project_id"`
@@ -908,6 +979,12 @@ func registerDecisions(api huma.API, e engine.Engine) {
 		Path:          "/projects/{project_id}/decisions",
 		Summary:       "Create decision",
 		DefaultStatus: http.StatusCreated,
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusInternalServerError,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                `header:"X-Actor-Id" required:"true"`
 		ProjectID string                `path:"project_id"`
@@ -959,6 +1036,12 @@ func registerAttestations(api huma.API, e engine.Engine) {
 		Path:          "/projects/{project_id}/attestations",
 		Summary:       "Add attestation",
 		DefaultStatus: http.StatusCreated,
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusInternalServerError,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                   `header:"X-Actor-Id" required:"true"`
 		ProjectID string                   `path:"project_id"`
@@ -1006,6 +1089,7 @@ func registerAttestations(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/attestations",
 		Summary:     "List attestations",
+		Errors:      []int{http.StatusBadRequest},
 	}, func(ctx context.Context, input *struct {
 		ProjectID  string `path:"project_id"`
 		EntityKind string `query:"entity_kind"`
@@ -1054,6 +1138,7 @@ func registerEvents(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/events",
 		Summary:     "List recent events",
+		Errors:      []int{http.StatusBadRequest},
 	}, func(ctx context.Context, input *struct {
 		ProjectID  string `path:"project_id"`
 		Type       string `query:"type"`
@@ -1097,6 +1182,10 @@ func registerRBAC(api huma.API, e engine.Engine) {
 		Method:      http.MethodGet,
 		Path:        "/projects/{project_id}/me/permissions",
 		Summary:     "Current actor permissions",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusNotFound,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string `header:"X-Actor-Id" required:"true"`
 		ProjectID string `path:"project_id"`
@@ -1110,7 +1199,11 @@ func registerRBAC(api huma.API, e engine.Engine) {
 		}
 		return &struct {
 			Body WhoAmIResponse `json:"body"`
-		}{Body: WhoAmIResponse(who)}, nil
+		}{Body: WhoAmIResponse{
+			ActorID:     who.ActorID,
+			Roles:       nonNilSlice(who.Roles),
+			Permissions: nonNilSlice(who.Permissions),
+		}}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -1118,6 +1211,12 @@ func registerRBAC(api huma.API, e engine.Engine) {
 		Method:      http.MethodPost,
 		Path:        "/projects/{project_id}/rbac/roles/grant",
 		Summary:     "Grant role",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
@@ -1135,6 +1234,12 @@ func registerRBAC(api huma.API, e engine.Engine) {
 		Method:      http.MethodPost,
 		Path:        "/projects/{project_id}/rbac/roles/revoke",
 		Summary:     "Revoke role",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string            `header:"X-Actor-Id" required:"true"`
 		ProjectID string            `path:"project_id"`
@@ -1152,6 +1257,12 @@ func registerRBAC(api huma.API, e engine.Engine) {
 		Method:      http.MethodPost,
 		Path:        "/projects/{project_id}/rbac/attestations/allow",
 		Summary:     "Allow attestation role",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                      `header:"X-Actor-Id" required:"true"`
 		ProjectID string                      `path:"project_id"`
@@ -1169,6 +1280,12 @@ func registerRBAC(api huma.API, e engine.Engine) {
 		Method:      http.MethodPost,
 		Path:        "/projects/{project_id}/rbac/attestations/deny",
 		Summary:     "Deny attestation role",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                      `header:"X-Actor-Id" required:"true"`
 		ProjectID string                      `path:"project_id"`

@@ -217,7 +217,7 @@ func TestAttestationEventLogged(t *testing.T) {
 	if att.ID == "" {
 		t.Fatalf("expected attestation id")
 	}
-	rows, err := env.Engine.DB.QueryContext(env.Ctx, `SELECT count(*) FROM events WHERE entity_kind='attestation'`)
+	rows, err := env.Engine.DB.QueryContext(env.Ctx, `SELECT count(*) FROM events WHERE type='attestation.added' AND entity_kind=? AND entity_id=?`, att.EntityKind, att.EntityID)
 	if err != nil {
 		t.Fatalf("query events: %v", err)
 	}

@@ -72,6 +72,42 @@ func newTestServer(t *testing.T) (*testServer, func()) {
 	return testSrv, func() { testSrv.Close() }
 }
 
+func fetchOpenAPISpec(t *testing.T, srv *testServer) map[string]any {
+	t.Helper()
+	res, data := doJSON(t, srv.Client(), http.MethodGet, srv.URL+"/v0/openapi.json", nil, nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("openapi status %d: %s", res.StatusCode, string(data))
+	}
+	var spec map[string]any
+	if err := json.Unmarshal(data, &spec); err != nil {
+		t.Fatalf("unmarshal openapi: %v", err)
+	}
+	return spec
+}
+
+func assertResponseDocumented(t *testing.T, spec map[string]any, path, method, code string) {
+	t.Helper()
+	paths, ok := spec["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("openapi paths missing")
+	}
+	item, ok := paths[path].(map[string]any)
+	if !ok {
+		t.Fatalf("path %s not found in openapi", path)
+	}
+	op, ok := item[strings.ToLower(method)].(map[string]any)
+	if !ok {
+		t.Fatalf("method %s missing for path %s", method, path)
+	}
+	resps, ok := op["responses"].(map[string]any)
+	if !ok {
+		t.Fatalf("responses missing for %s %s", method, path)
+	}
+	if _, ok := resps[code]; !ok {
+		t.Fatalf("response code %s missing for %s %s", code, method, path)
+	}
+}
+
 func doJSON(t *testing.T, client *http.Client, method, url string, body any, headers map[string]string) (*http.Response, []byte) {
 	t.Helper()
 	var reader *bytes.Reader
@@ -108,6 +144,132 @@ func doJSON(t *testing.T, client *http.Client, method, url string, body any, hea
 		t.Fatalf("read body: %v", err)
 	}
 	return res, data
+}
+
+func TestEmptyPaginationArrays(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	assertItems := func(endpoint string) {
+		t.Helper()
+		res, data := doJSON(t, client, http.MethodGet, srv.URL+endpoint, nil, nil)
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s status %d: %s", endpoint, res.StatusCode, string(data))
+		}
+		var page struct {
+			Items []json.RawMessage `json:"items"`
+		}
+		if err := json.Unmarshal(data, &page); err != nil {
+			t.Fatalf("unmarshal page: %v", err)
+		}
+		if page.Items == nil {
+			t.Fatalf("items nil for %s", endpoint)
+		}
+		if len(page.Items) != 0 {
+			t.Fatalf("expected 0 items for %s, got %d", endpoint, len(page.Items))
+		}
+	}
+
+	assertItems("/v0/projects/" + projectID + "/tasks")
+	assertItems("/v0/projects/" + projectID + "/iterations")
+	assertItems("/v0/projects/" + projectID + "/attestations")
+	assertItems("/v0/projects/" + projectID + "/events?type=none")
+	treeRes, treeBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/tasks/tree", nil, nil)
+	if treeRes.StatusCode != http.StatusOK {
+		t.Fatalf("task tree status %d: %s", treeRes.StatusCode, string(treeBody))
+	}
+	var tree []any
+	if err := json.Unmarshal(treeBody, &tree); err != nil {
+		t.Fatalf("unmarshal tree: %v", err)
+	}
+	if tree == nil || len(tree) != 0 {
+		t.Fatalf("expected empty task tree, got %v", tree)
+	}
+}
+
+func TestValidationArraysAreNonNull(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Needs validation status",
+		"type":  "technical",
+	}, nil)
+	if createRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", createRes.StatusCode, string(data))
+	}
+	var created TaskResponse
+	_ = json.Unmarshal(data, &created)
+
+	valRes, valBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/tasks/"+created.ID+"/validation", nil, nil)
+	if valRes.StatusCode != http.StatusOK {
+		t.Fatalf("validation status %d: %s", valRes.StatusCode, string(valBody))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(valBody, &payload); err != nil {
+		t.Fatalf("unmarshal validation: %v", err)
+	}
+	for _, key := range []string{"required", "present", "missing"} {
+		val, ok := payload[key]
+		if !ok {
+			t.Fatalf("%s missing in response", key)
+		}
+		arr, ok := val.([]any)
+		if !ok {
+			t.Fatalf("%s not array: %#v", key, val)
+		}
+		if arr == nil {
+			t.Fatalf("%s is nil", key)
+		}
+	}
+}
+
+func TestTaskDefaultsForDependsOnAndCompletedAt(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Check defaults",
+		"type":  "technical",
+	}, nil)
+	if createRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", createRes.StatusCode, string(data))
+	}
+	var created TaskResponse
+	_ = json.Unmarshal(data, &created)
+
+	taskRes, taskBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/tasks/"+created.ID, nil, nil)
+	if taskRes.StatusCode != http.StatusOK {
+		t.Fatalf("get task: %d %s", taskRes.StatusCode, string(taskBody))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(taskBody, &payload); err != nil {
+		t.Fatalf("unmarshal task: %v", err)
+	}
+	deps, ok := payload["depends_on"]
+	if !ok {
+		t.Fatalf("depends_on missing")
+	}
+	depSlice, ok := deps.([]any)
+	if !ok || depSlice == nil {
+		t.Fatalf("depends_on not array: %#v", deps)
+	}
+	if len(depSlice) != 0 {
+		t.Fatalf("expected empty depends_on, got %v", depSlice)
+	}
+	completed, ok := payload["completed_at"]
+	if !ok {
+		t.Fatalf("completed_at missing")
+	}
+	if completed != nil {
+		t.Fatalf("expected completed_at null, got %v", completed)
+	}
 }
 
 func TestTaskDoneWithAttestations(t *testing.T) {
@@ -175,6 +337,7 @@ func TestLeaseConflict(t *testing.T) {
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Lease me",
+		"type":  "technical",
 	}, nil)
 	if res.StatusCode != http.StatusCreated {
 		t.Fatalf("create task: %d %s", res.StatusCode, string(data))
@@ -190,6 +353,15 @@ func TestLeaseConflict(t *testing.T) {
 	if claim2.StatusCode != http.StatusConflict {
 		t.Fatalf("expected conflict, got %d %s", claim2.StatusCode, string(body2))
 	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(body2, &apiErr)
+	if apiErr.Error.Code != "lease_conflict" {
+		t.Fatalf("unexpected error code: %s", apiErr.Error.Code)
+	}
+	spec := fetchOpenAPISpec(t, srv)
+	assertResponseDocumented(t, spec, "/v0/projects/{project_id}/tasks/{id}/claim", http.MethodPost, "409")
 }
 
 func TestIterationValidationBlocked(t *testing.T) {
@@ -236,6 +408,7 @@ func TestUnauthorizedTaskCreate(t *testing.T) {
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Should fail",
+		"type":  "technical",
 	}, map[string]string{"X-Actor-Id": "intruder"})
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", res.StatusCode, string(data))
@@ -262,6 +435,7 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 
 	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Secure task",
+		"type":  "technical",
 	}, nil)
 	if taskRes.StatusCode != http.StatusCreated {
 		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskData))
@@ -292,6 +466,8 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 	if apiErr.Error.Code != "forbidden_attestation_kind" {
 		t.Fatalf("unexpected error code: %s", apiErr.Error.Code)
 	}
+	spec := fetchOpenAPISpec(t, srv)
+	assertResponseDocumented(t, spec, "/v0/projects/{project_id}/attestations", http.MethodPost, "403")
 }
 
 func TestRoleGrantAllowsClaim(t *testing.T) {
@@ -302,6 +478,7 @@ func TestRoleGrantAllowsClaim(t *testing.T) {
 
 	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Claim me",
+		"type":  "technical",
 	}, nil)
 	if taskRes.StatusCode != http.StatusCreated {
 		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskData))
@@ -331,6 +508,7 @@ func TestForceRequiresPermission(t *testing.T) {
 
 	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 		"title": "Needs force",
+		"type":  "technical",
 	}, nil)
 	if taskRes.StatusCode != http.StatusCreated {
 		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskData))
@@ -489,6 +667,7 @@ func TestPaginationProvidesCursor(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		res, body := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
 			"title": fmt.Sprintf("Task %d", i),
+			"type":  "technical",
 		}, nil)
 		if res.StatusCode != http.StatusCreated {
 			t.Fatalf("create task %d: %d %s", i, res.StatusCode, string(body))

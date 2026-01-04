@@ -15,27 +15,27 @@ type CreateProjectRequest struct {
 }
 
 type TaskValidationRequest struct {
-	Mode      string   `json:"mode,omitempty" enum:"none,all,any,threshold"`
-	Require   []string `json:"require,omitempty"`
-	Threshold *int     `json:"threshold,omitempty"`
+	Mode      string   `json:"mode,omitempty" enum:"none,all,any,threshold" example:"all"`
+	Require   []string `json:"require,omitempty" example:"[\"ci.passed\",\"review.approved\"]"`
+	Threshold *int     `json:"threshold,omitempty" example:"2"`
 }
 
 type TaskPolicyRequest struct {
-	Preset string `json:"preset,omitempty"`
+	Preset string `json:"preset,omitempty" example:"feature.default"`
 }
 
 type CreateTaskRequest struct {
-	ID          *string                `json:"id,omitempty"`
-	IterationID *string                `json:"iteration_id,omitempty"`
-	ParentID    *string                `json:"parent_id,omitempty"`
-	Type        string                 `json:"type" enum:"technical,feature,bug,docs,chore"`
-	Title       string                 `json:"title"`
-	Description *string                `json:"description,omitempty"`
-	AssigneeID  *string                `json:"assignee_id,omitempty"`
-	DependsOn   []string               `json:"depends_on,omitempty"`
+	ID          *string                `json:"id,omitempty" example:"task-auth-1"`
+	IterationID *string                `json:"iteration_id,omitempty" example:"iter-1"`
+	ParentID    *string                `json:"parent_id,omitempty" example:"task-epic"`
+	Type        string                 `json:"type" enum:"technical,feature,bug,docs,chore" example:"feature"`
+	Title       string                 `json:"title" example:"Ship authentication"`
+	Description *string                `json:"description,omitempty" example:"Implement login and SSO flows"`
+	AssigneeID  *string                `json:"assignee_id,omitempty" example:"dev-1"`
+	DependsOn   []string               `json:"depends_on,omitempty" example:"[\"task-seed\"]"`
 	Policy      *TaskPolicyRequest     `json:"policy,omitempty"`
 	Validation  *TaskValidationRequest `json:"validation,omitempty"`
-	WorkProof   map[string]any         `json:"work_proof,omitempty"`
+	WorkProof   map[string]any         `json:"work_proof,omitempty" example:"{\"pr\":123}"`
 }
 
 type UpdateTaskValidationRequest struct {
@@ -68,22 +68,22 @@ type SetIterationStatusRequest struct {
 }
 
 type CreateDecisionRequest struct {
-	ID           string         `json:"id"`
-	Title        string         `json:"title"`
-	Decision     string         `json:"decision"`
-	DeciderID    string         `json:"decider_id"`
+	ID           string         `json:"id" example:"dec-1"`
+	Title        string         `json:"title" example:"Choose runtime"`
+	Decision     string         `json:"decision" example:"Adopt Go for backend"`
+	DeciderID    string         `json:"decider_id" example:"cto-1"`
 	Context      map[string]any `json:"context,omitempty"`
-	Rationale    []string       `json:"rationale,omitempty"`
-	Alternatives []string       `json:"alternatives,omitempty"`
+	Rationale    []string       `json:"rationale,omitempty" example:"[\"Team experience\",\"Ecosystem support\"]"`
+	Alternatives []string       `json:"alternatives,omitempty" example:"[\"Rust\",\"NodeJS\"]"`
 }
 
 type CreateAttestationRequest struct {
-	ID         *string        `json:"id,omitempty"`
-	EntityKind string         `json:"entity_kind" enum:"project,iteration,task,decision"`
-	EntityID   string         `json:"entity_id"`
-	Kind       string         `json:"kind"`
-	TS         *string        `json:"ts,omitempty" format:"date-time"`
-	Payload    map[string]any `json:"payload,omitempty"`
+	ID         *string        `json:"id,omitempty" example:"att-1"`
+	EntityKind string         `json:"entity_kind" enum:"project,iteration,task,decision" example:"task"`
+	EntityID   string         `json:"entity_id" example:"task-auth-1"`
+	Kind       string         `json:"kind" example:"review.approved"`
+	TS         *string        `json:"ts,omitempty" format:"date-time" example:"2024-05-01T10:00:00Z"`
+	Payload    map[string]any `json:"payload,omitempty" example:"{\"note\":\"LGTM\"}"`
 }
 
 // Response payloads
@@ -105,23 +105,23 @@ type IterationResponse struct {
 }
 
 type TaskResponse struct {
-	ID                   string         `json:"id"`
-	ProjectID            string         `json:"project_id"`
-	IterationID          *string        `json:"iteration_id,omitempty"`
-	ParentID             *string        `json:"parent_id,omitempty"`
-	Type                 string         `json:"type" enum:"technical,feature,bug,docs,chore"`
-	Title                string         `json:"title"`
-	Description          string         `json:"description,omitempty"`
-	Status               string         `json:"status" enum:"planned,in_progress,review,done,rejected,canceled"`
-	AssigneeID           *string        `json:"assignee_id,omitempty"`
-	WorkProof            map[string]any `json:"work_proof,omitempty"`
-	ValidationMode       string         `json:"validation_mode" enum:"none,all,any,threshold"`
-	RequiredAttestations []string       `json:"required_attestations,omitempty"`
-	RequiredThreshold    *int           `json:"required_threshold,omitempty"`
-	DependsOn            []string       `json:"depends_on"`
-	CreatedAt            string         `json:"created_at" format:"date-time"`
-	UpdatedAt            string         `json:"updated_at" format:"date-time"`
-	CompletedAt          *string        `json:"completed_at,omitempty" format:"date-time"`
+	ID                   string         `json:"id" example:"task-auth-1"`
+	ProjectID            string         `json:"project_id" example:"proofline"`
+	IterationID          *string        `json:"iteration_id,omitempty" example:"iter-1"`
+	ParentID             *string        `json:"parent_id,omitempty" example:"task-epic"`
+	Type                 string         `json:"type" enum:"technical,feature,bug,docs,chore" example:"feature"`
+	Title                string         `json:"title" example:"Ship authentication"`
+	Description          string         `json:"description,omitempty" example:"Implement login and SSO flows"`
+	Status               string         `json:"status" enum:"planned,in_progress,review,done,rejected,canceled" example:"planned"`
+	AssigneeID           *string        `json:"assignee_id,omitempty" example:"dev-1"`
+	WorkProof            map[string]any `json:"work_proof,omitempty" example:"{\"pr\":123}"`
+	ValidationMode       string         `json:"validation_mode" enum:"none,all,any,threshold" example:"all"`
+	RequiredAttestations []string       `json:"required_attestations" example:"[\"ci.passed\",\"review.approved\"]"`
+	RequiredThreshold    *int           `json:"required_threshold,omitempty" example:"2"`
+	DependsOn            []string       `json:"depends_on" example:"[]"`
+	CreatedAt            string         `json:"created_at" format:"date-time" example:"2024-05-01T09:00:00Z"`
+	UpdatedAt            string         `json:"updated_at" format:"date-time" example:"2024-05-01T09:05:00Z"`
+	CompletedAt          *string        `json:"completed_at" format:"date-time" example:"2024-05-02T10:00:00Z"`
 }
 
 type DecisionResponse struct {
@@ -131,8 +131,8 @@ type DecisionResponse struct {
 	Decision     string         `json:"decision"`
 	DeciderID    string         `json:"decider_id"`
 	Context      map[string]any `json:"context,omitempty"`
-	Rationale    []string       `json:"rationale,omitempty"`
-	Alternatives []string       `json:"alternatives,omitempty"`
+	Rationale    []string       `json:"rationale"`
+	Alternatives []string       `json:"alternatives"`
 	CreatedAt    string         `json:"created_at" format:"date-time"`
 }
 
@@ -159,19 +159,19 @@ type EventResponse struct {
 	TS         string         `json:"ts" format:"date-time"`
 	Type       string         `json:"type"`
 	ProjectID  string         `json:"project_id,omitempty"`
-	EntityKind string         `json:"entity_kind"`
+	EntityKind string         `json:"entity_kind" enum:"project,iteration,task,decision,rbac"`
 	EntityID   string         `json:"entity_id,omitempty"`
 	ActorID    string         `json:"actor_id"`
 	Payload    map[string]any `json:"payload"`
 }
 
 type ValidationStatusResponse struct {
-	Mode      string   `json:"mode" enum:"none,all,any,threshold"`
-	Required  []string `json:"required"`
-	Threshold *int     `json:"threshold,omitempty"`
-	Present   []string `json:"present"`
-	Missing   []string `json:"missing"`
-	Satisfied bool     `json:"satisfied"`
+	Mode      string   `json:"mode" enum:"none,all,any,threshold" example:"all"`
+	Required  []string `json:"required" example:"[\"ci.passed\",\"review.approved\"]"`
+	Threshold *int     `json:"threshold,omitempty" example:"2"`
+	Present   []string `json:"present" example:"[\"ci.passed\"]"`
+	Missing   []string `json:"missing" example:"[\"review.approved\"]"`
+	Satisfied bool     `json:"satisfied" example:"false"`
 }
 
 type ProjectConfigResponse struct {
@@ -270,7 +270,7 @@ func taskResponse(t domain.Task) TaskResponse {
 		AssigneeID:           t.AssigneeID,
 		WorkProof:            wp,
 		ValidationMode:       defaultMode(t.ValidationMode),
-		RequiredAttestations: req,
+		RequiredAttestations: nonNilSlice(req),
 		RequiredThreshold:    t.RequiredThreshold,
 		DependsOn:            nonNilSlice(t.DependsOn),
 		CreatedAt:            t.CreatedAt,
@@ -287,8 +287,8 @@ func decisionResponse(d domain.Decision) DecisionResponse {
 		Decision:     d.Decision,
 		DeciderID:    d.DeciderID,
 		Context:      decodeJSONMap(strPtr(d.ContextJSON)),
-		Rationale:    decodeStringSlice(strPtr(d.RationaleJSON)),
-		Alternatives: decodeStringSlice(strPtr(d.AlternativesJSON)),
+		Rationale:    nonNilSlice(decodeStringSlice(strPtr(d.RationaleJSON))),
+		Alternatives: nonNilSlice(decodeStringSlice(strPtr(d.AlternativesJSON))),
 		CreatedAt:    d.CreatedAt,
 	}
 }
@@ -342,7 +342,7 @@ func configResponse(cfg *config.Config) ProjectConfigResponse {
 	for name, preset := range cfg.Policies.Presets {
 		res.Policies.Presets[name] = policyPresetResponse{
 			Mode:      preset.Mode,
-			Require:   preset.Require,
+			Require:   nonNilSlice(preset.Require),
 			Threshold: preset.Threshold,
 		}
 	}
@@ -369,11 +369,11 @@ func decodeJSONMap(raw *string) map[string]any {
 
 func decodeStringSlice(raw *string) []string {
 	if raw == nil || *raw == "" {
-		return nil
+		return []string{}
 	}
 	var arr []string
 	if err := json.Unmarshal([]byte(*raw), &arr); err != nil {
-		return nil
+		return []string{}
 	}
 	return arr
 }
