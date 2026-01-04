@@ -228,6 +228,139 @@ func TestIterationValidationBlocked(t *testing.T) {
 	}
 }
 
+func TestUnauthorizedTaskCreate(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Should fail",
+	}, map[string]string{"X-Actor-Id": "intruder"})
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", res.StatusCode, string(data))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(data, &apiErr)
+	if apiErr.Error.Code != "forbidden" {
+		t.Fatalf("unexpected error code: %s", apiErr.Error.Code)
+	}
+
+	evtRes, evtData := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/events?type=auth.denied&limit=1", nil, nil)
+	if evtRes.StatusCode != http.StatusOK {
+		t.Fatalf("events status %d: %s", evtRes.StatusCode, string(evtData))
+	}
+}
+
+func TestUnauthorizedAttestationKind(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Secure task",
+	}, nil)
+	if taskRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskData))
+	}
+	var task TaskResponse
+	_ = json.Unmarshal(taskData, &task)
+
+	grantRes, grantData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/rbac/roles/grant", map[string]any{
+		"actor_id": "rev1",
+		"role_id":  "reviewer",
+	}, nil)
+	if grantRes.StatusCode != http.StatusOK {
+		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
+	}
+
+	attRes, attData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/attestations", map[string]any{
+		"entity_kind": "task",
+		"entity_id":   task.ID,
+		"kind":        "security.ok",
+	}, map[string]string{"X-Actor-Id": "rev1"})
+	if attRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", attRes.StatusCode, string(attData))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(attData, &apiErr)
+	if apiErr.Error.Code != "forbidden_attestation_kind" {
+		t.Fatalf("unexpected error code: %s", apiErr.Error.Code)
+	}
+}
+
+func TestRoleGrantAllowsClaim(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Claim me",
+	}, nil)
+	if taskRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskData))
+	}
+	var task TaskResponse
+	_ = json.Unmarshal(taskData, &task)
+
+	grantRes, grantData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/rbac/roles/grant", map[string]any{
+		"actor_id": "dev-1",
+		"role_id":  "dev",
+	}, nil)
+	if grantRes.StatusCode != http.StatusOK {
+		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
+	}
+
+	claimRes, claimData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/claim", nil, map[string]string{"X-Actor-Id": "dev-1"})
+	if claimRes.StatusCode != http.StatusOK {
+		t.Fatalf("claim failed: %d %s", claimRes.StatusCode, string(claimData))
+	}
+}
+
+func TestForceRequiresPermission(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Needs force",
+	}, nil)
+	if taskRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", taskRes.StatusCode, string(taskData))
+	}
+	var task TaskResponse
+	_ = json.Unmarshal(taskData, &task)
+
+	grantRes, grantData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/rbac/roles/grant", map[string]any{
+		"actor_id": "force-dev",
+		"role_id":  "dev",
+	}, nil)
+	if grantRes.StatusCode != http.StatusOK {
+		t.Fatalf("grant role: %d %s", grantRes.StatusCode, string(grantData))
+	}
+
+	doneRes, doneData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/done?force=true", map[string]any{
+		"work_proof": map[string]any{"note": "force"},
+	}, map[string]string{"X-Actor-Id": "force-dev"})
+	if doneRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", doneRes.StatusCode, string(doneData))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(doneData, &apiErr)
+	if apiErr.Error.Code != "forbidden" {
+		t.Fatalf("unexpected error code: %s", apiErr.Error.Code)
+	}
+}
+
 func TestCreateTaskValidation(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()

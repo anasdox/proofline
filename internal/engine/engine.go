@@ -12,6 +12,7 @@ import (
 
 	"proofline/internal/config"
 	"proofline/internal/domain"
+	"proofline/internal/engine/auth"
 	"proofline/internal/events"
 	"proofline/internal/repo"
 )
@@ -22,6 +23,7 @@ type Engine struct {
 	Events events.Writer
 	Config *config.Config
 	Now    func() time.Time
+	Auth   auth.Service
 }
 
 func New(db *sql.DB, cfg *config.Config) Engine {
@@ -31,6 +33,7 @@ func New(db *sql.DB, cfg *config.Config) Engine {
 		Events: events.Writer{DB: db},
 		Config: cfg,
 		Now:    time.Now,
+		Auth:   auth.Service{DB: db},
 	}
 }
 
@@ -62,6 +65,9 @@ func (e Engine) InitProject(ctx context.Context, projectID, description, actorID
 	}
 	if err := e.Repo.UpsertProjectConfigTx(ctx, tx, p.ID, config.Default(p.ID)); err != nil {
 		return domain.Project{}, fmt.Errorf("insert project config: %w", err)
+	}
+	if err := e.seedRBAC(ctx, tx, p.ID, actorID); err != nil {
+		return domain.Project{}, err
 	}
 	if err := e.Events.Append(ctx, tx, "project.init", p.ID, "project", p.ID, actorID, events.EventPayload{"status": p.Status}); err != nil {
 		return domain.Project{}, err
@@ -198,6 +204,9 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 		return domain.Task{}, err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, opts.ProjectID, opts.ActorID, "task.create"); err != nil {
+		return domain.Task{}, err
+	}
 
 	if err := e.Repo.InsertTask(ctx, tx, t); err != nil {
 		return domain.Task{}, err
@@ -266,6 +275,47 @@ func (e Engine) ensureNoCycle(ctx context.Context, parentID, childID string) err
 	return nil
 }
 
+func (e Engine) ensureActor(ctx context.Context, tx *sql.Tx, actorID string) error {
+	return e.Auth.EnsureActor(ctx, tx, actorID)
+}
+
+func (e Engine) requirePermission(ctx context.Context, tx *sql.Tx, projectID, actorID, perm string) error {
+	if err := e.ensureActor(ctx, tx, actorID); err != nil {
+		return err
+	}
+	ok, err := e.Auth.ActorHasPermission(ctx, tx, projectID, actorID, perm)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		_ = e.Events.Append(ctx, tx, "auth.denied", projectID, "rbac", projectID, actorID, events.EventPayload{"permission": perm, "reason": "missing_permission"})
+		return auth.ForbiddenError{Permission: perm}
+	}
+	return nil
+}
+
+func (e Engine) requireAttestationAuthority(ctx context.Context, tx *sql.Tx, projectID, actorID, kind string) error {
+	if err := e.ensureActor(ctx, tx, actorID); err != nil {
+		return err
+	}
+	ok, err := e.Auth.ActorCanAttest(ctx, tx, projectID, actorID, kind)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		_ = e.Events.Append(ctx, tx, "auth.denied", projectID, "rbac", projectID, actorID, events.EventPayload{"kind": kind, "reason": "missing_authority"})
+		return auth.ForbiddenAttestationError{Kind: kind}
+	}
+	return nil
+}
+
+func (e Engine) requireForcePermission(ctx context.Context, tx *sql.Tx, projectID, actorID string) error {
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "force.use"); err != nil {
+		return err
+	}
+	return e.Events.Append(ctx, tx, "force.used", projectID, "rbac", projectID, actorID, events.EventPayload{})
+}
+
 // TaskUpdateOptions encapsulates allowed updates.
 type TaskUpdateOptions struct {
 	ID                string
@@ -306,6 +356,14 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		return t, err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, t.ProjectID, opts.ActorID, "task.update"); err != nil {
+		return t, err
+	}
+	if opts.Force {
+		if err := e.requireForcePermission(ctx, tx, t.ProjectID, opts.ActorID); err != nil {
+			return t, err
+		}
+	}
 
 	if opts.ParentProvided {
 		if opts.SetParent == nil || (opts.SetParent != nil && *opts.SetParent == "") {
@@ -382,6 +440,11 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		t.RequiredThreshold = opts.Threshold
 	}
 	if opts.Status != "" && opts.Status != t.Status {
+		if opts.Status == "done" {
+			if err := e.requirePermission(ctx, tx, t.ProjectID, opts.ActorID, "task.done"); err != nil {
+				return t, err
+			}
+		}
 		if !opts.Force {
 			if err := e.requireLeaseOrForce(ctx, tx, t.ID, opts.ActorID, opts.Force); err != nil {
 				return t, err
@@ -502,7 +565,7 @@ func (e Engine) requireLeaseOrForce(ctx context.Context, tx *sql.Tx, taskID, act
 	if force {
 		return nil
 	}
-	l, err := e.Repo.GetLease(ctx, taskID)
+	l, err := e.Repo.GetLeaseTx(ctx, tx, taskID)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			return errors.New("lease required; none exists")
@@ -543,6 +606,14 @@ func (e Engine) TaskDone(ctx context.Context, taskID, workProofJSON, actorID str
 		return t, err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, t.ProjectID, actorID, "task.done"); err != nil {
+		return t, err
+	}
+	if force {
+		if err := e.requireForcePermission(ctx, tx, t.ProjectID, actorID); err != nil {
+			return t, err
+		}
+	}
 
 	t.WorkProofJSON = &workProofJSON
 	targetStatus := "done"
@@ -702,6 +773,9 @@ func (e Engine) ClaimLease(ctx context.Context, taskID, actorID string, leaseSec
 		return domain.Lease{}, err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, t.ProjectID, actorID, "task.claim"); err != nil {
+		return domain.Lease{}, err
+	}
 
 	now := e.now().UTC()
 	expires := now.Add(time.Duration(leaseSeconds) * time.Second)
@@ -711,7 +785,7 @@ func (e Engine) ClaimLease(ctx context.Context, taskID, actorID string, leaseSec
 		AcquiredAt: now.Format(time.RFC3339),
 		ExpiresAt:  expires.Format(time.RFC3339),
 	}
-	existing, err := e.Repo.GetLease(ctx, taskID)
+	existing, err := e.Repo.GetLeaseTx(ctx, tx, taskID)
 	if err != nil && !errors.Is(err, repo.ErrNotFound) {
 		return domain.Lease{}, err
 	}
@@ -746,6 +820,9 @@ func (e Engine) ReleaseLease(ctx context.Context, taskID, actorID string) error 
 		return err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, t.ProjectID, actorID, "task.release"); err != nil {
+		return err
+	}
 	if err := e.Repo.DeleteLease(ctx, tx, taskID); err != nil {
 		return err
 	}
@@ -771,6 +848,9 @@ func (e Engine) CreateIteration(ctx context.Context, it domain.Iteration, actorI
 		return it, err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, it.ProjectID, actorID, "iteration.create"); err != nil {
+		return it, err
+	}
 	if err := e.Repo.InsertIteration(ctx, it); err != nil {
 		return it, err
 	}
@@ -835,6 +915,14 @@ func (e Engine) SetIterationStatus(ctx context.Context, id, status, actorID stri
 		return it, err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, it.ProjectID, actorID, "iteration.set_status"); err != nil {
+		return it, err
+	}
+	if force {
+		if err := e.requireForcePermission(ctx, tx, it.ProjectID, actorID); err != nil {
+			return it, err
+		}
+	}
 	if err := e.Repo.UpdateIterationStatus(ctx, tx, id, status); err != nil {
 		return it, err
 	}
@@ -889,6 +977,9 @@ func (e Engine) CreateDecision(ctx context.Context, d domain.Decision, actorID s
 		return d, err
 	}
 	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, d.ProjectID, actorID, "decision.create"); err != nil {
+		return d, err
+	}
 	if err := e.Repo.InsertDecision(ctx, d); err != nil {
 		return d, err
 	}
@@ -924,7 +1015,13 @@ func (e Engine) AddAttestation(ctx context.Context, att domain.Attestation, acto
 		return att, err
 	}
 	defer tx.Rollback()
-	if err := e.Repo.InsertAttestation(ctx, att); err != nil {
+	if err := e.requirePermission(ctx, tx, att.ProjectID, actorID, "attestation.add"); err != nil {
+		return att, err
+	}
+	if err := e.requireAttestationAuthority(ctx, tx, att.ProjectID, actorID, att.Kind); err != nil {
+		return att, err
+	}
+	if err := e.Repo.InsertAttestationTx(ctx, tx, att); err != nil {
 		return att, err
 	}
 	if err := e.Events.Append(ctx, tx, "attestation.added", att.ProjectID, "attestation", att.ID, actorID, events.EventPayload{"kind": att.Kind, "entity": att.EntityID}); err != nil {
@@ -943,6 +1040,112 @@ func (e Engine) ensureTaskPolicySatisfied(ctx context.Context, t domain.Task) (b
 	}
 	defer tx.Rollback()
 	return e.isTaskValidationSatisfied(ctx, tx, t, "")
+}
+
+// RBAC operations
+
+type WhoAmI struct {
+	ActorID     string   `json:"actor_id"`
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
+}
+
+func (e Engine) WhoAmI(ctx context.Context, projectID, actorID string) (WhoAmI, error) {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return WhoAmI{}, err
+	}
+	defer tx.Rollback()
+	if err := e.ensureActor(ctx, tx, actorID); err != nil {
+		return WhoAmI{}, err
+	}
+	roles, err := e.Auth.ActorRoles(ctx, tx, projectID, actorID)
+	if err != nil {
+		return WhoAmI{}, err
+	}
+	perms, err := e.Auth.ActorPermissions(ctx, tx, projectID, actorID)
+	if err != nil {
+		return WhoAmI{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return WhoAmI{}, err
+	}
+	return WhoAmI{ActorID: actorID, Roles: roles, Permissions: perms}, nil
+}
+
+func (e Engine) GrantRole(ctx context.Context, projectID, actorID, targetActor, roleID string) error {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "rbac.manage"); err != nil {
+		return err
+	}
+	if err := e.ensureActor(ctx, tx, targetActor); err != nil {
+		return err
+	}
+	if err := e.Repo.AssignRole(ctx, tx, projectID, targetActor, roleID); err != nil {
+		return err
+	}
+	if err := e.Events.Append(ctx, tx, "rbac.role_granted", projectID, "rbac", projectID, actorID, events.EventPayload{"actor_id": targetActor, "role_id": roleID}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (e Engine) RevokeRole(ctx context.Context, projectID, actorID, targetActor, roleID string) error {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "rbac.manage"); err != nil {
+		return err
+	}
+	if err := e.Repo.RevokeRole(ctx, tx, projectID, targetActor, roleID); err != nil {
+		return err
+	}
+	if err := e.Events.Append(ctx, tx, "rbac.role_revoked", projectID, "rbac", projectID, actorID, events.EventPayload{"actor_id": targetActor, "role_id": roleID}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (e Engine) AllowAttestationRole(ctx context.Context, projectID, actorID, kind, roleID string) error {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "rbac.manage"); err != nil {
+		return err
+	}
+	if err := e.Repo.AllowAttestationRole(ctx, tx, projectID, kind, roleID); err != nil {
+		return err
+	}
+	if err := e.Events.Append(ctx, tx, "rbac.attestation_allowed", projectID, "rbac", projectID, actorID, events.EventPayload{"kind": kind, "role_id": roleID}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (e Engine) DenyAttestationRole(ctx context.Context, projectID, actorID, kind, roleID string) error {
+	tx, err := e.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := e.requirePermission(ctx, tx, projectID, actorID, "rbac.manage"); err != nil {
+		return err
+	}
+	if err := e.Repo.DenyAttestationRole(ctx, tx, projectID, kind, roleID); err != nil {
+		return err
+	}
+	if err := e.Events.Append(ctx, tx, "rbac.attestation_denied", projectID, "rbac", projectID, actorID, events.EventPayload{"kind": kind, "role_id": roleID}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // --- helpers ---
@@ -984,4 +1187,100 @@ func nullable(v string) any {
 		return nil
 	}
 	return v
+}
+
+func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID string) error {
+	now := e.now().UTC().Format(time.RFC3339)
+	if err := e.Auth.EnsureActor(ctx, tx, actorID); err != nil {
+		return err
+	}
+	roleDescs := map[string]string{
+		"owner":    "Project owner",
+		"pm":       "Project manager",
+		"po":       "Product owner",
+		"dev":      "Developer",
+		"reviewer": "Reviewer",
+		"qa":       "Quality assurance",
+		"security": "Security",
+		"release":  "Release manager",
+		"observer": "Read-only observer",
+	}
+	for role, desc := range roleDescs {
+		if err := e.Repo.InsertRole(ctx, tx, role, desc); err != nil {
+			return err
+		}
+	}
+	permDescs := map[string]string{
+		"project.create":       "Create project",
+		"task.create":          "Create task",
+		"task.update":          "Update task",
+		"task.done":            "Complete task",
+		"task.claim":           "Claim task",
+		"task.release":         "Release task",
+		"iteration.create":     "Create iteration",
+		"iteration.set_status": "Update iteration status",
+		"decision.create":      "Create decision",
+		"attestation.add":      "Add attestation",
+		"rbac.manage":          "Manage RBAC",
+		"force.use":            "Use force flag",
+	}
+	for perm, desc := range permDescs {
+		if err := e.Repo.InsertPermission(ctx, tx, perm, desc); err != nil {
+			return err
+		}
+	}
+	rolePerms := map[string][]string{
+		"owner":    keys(permDescs),
+		"pm":       {"task.create", "task.update", "iteration.create", "iteration.set_status", "decision.create", "attestation.add"},
+		"po":       {"task.create", "task.update", "attestation.add"},
+		"dev":      {"task.claim", "task.update", "task.done", "task.release"},
+		"reviewer": {"attestation.add"},
+		"qa":       {"attestation.add"},
+		"security": {"attestation.add"},
+		"release":  {"iteration.set_status", "attestation.add", "force.use"},
+		"observer": {},
+	}
+	for role, perms := range rolePerms {
+		for _, p := range perms {
+			if err := e.Repo.AddRolePermission(ctx, tx, role, p); err != nil {
+				return err
+			}
+		}
+	}
+	if err := e.Repo.EnsureActor(ctx, tx, actorID, now); err != nil {
+		return err
+	}
+	if err := e.Repo.AssignRole(ctx, tx, projectID, actorID, "owner"); err != nil {
+		return err
+	}
+	authorities := map[string][]string{
+		"ci.passed":          {"dev", "owner", "pm"},
+		"review.approved":    {"reviewer", "owner"},
+		"acceptance.passed":  {"qa", "owner", "po"},
+		"security.ok":        {"security", "owner"},
+		"iteration.approved": {"release", "owner"},
+		"init.check":         {"owner"},
+	}
+	for kind, roles := range authorities {
+		for _, role := range roles {
+			if err := e.Repo.AllowAttestationRole(ctx, tx, projectID, kind, role); err != nil {
+				return err
+			}
+		}
+	}
+	if err := e.Events.Append(ctx, tx, "rbac.seeded", projectID, "rbac", projectID, actorID, events.EventPayload{}); err != nil {
+		return err
+	}
+	if err := e.Events.Append(ctx, tx, "rbac.role_granted", projectID, "rbac", projectID, actorID, events.EventPayload{"actor_id": actorID, "role_id": "owner"}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func keys(m map[string]string) []string {
+	res := make([]string, 0, len(m))
+	for k := range m {
+		res = append(res, k)
+	}
+	return res
 }

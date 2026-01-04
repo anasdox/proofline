@@ -19,6 +19,7 @@ import (
 	"proofline/internal/config"
 	"proofline/internal/domain"
 	"proofline/internal/engine"
+	"proofline/internal/engine/auth"
 	"proofline/internal/repo"
 )
 
@@ -93,6 +94,7 @@ func New(cfg Config) (http.Handler, error) {
 	registerDecisions(group, cfg.Engine)
 	registerAttestations(group, cfg.Engine)
 	registerEvents(group, cfg.Engine)
+	registerRBAC(group, cfg.Engine)
 	registerOpenAPI(router, api, basePath)
 
 	return router, nil
@@ -115,6 +117,14 @@ func newAPIError(status int, code, message string, details map[string]any) huma.
 func handleError(err error) huma.StatusError {
 	if err == nil {
 		return nil
+	}
+	var fe auth.ForbiddenError
+	if errors.As(err, &fe) {
+		return newAPIError(http.StatusForbidden, "forbidden", err.Error(), map[string]any{"permission": fe.Permission})
+	}
+	var ae auth.ForbiddenAttestationError
+	if errors.As(err, &ae) {
+		return newAPIError(http.StatusForbidden, "forbidden_attestation_kind", err.Error(), map[string]any{"kind": ae.Kind})
 	}
 	if errors.Is(err, repo.ErrNotFound) {
 		return newAPIError(http.StatusNotFound, "not_found", err.Error(), nil)
@@ -147,6 +157,8 @@ func defaultCodeForStatus(status int) string {
 		return "conflict"
 	case http.StatusUnprocessableEntity:
 		return "validation_failed"
+	case http.StatusForbidden:
+		return "forbidden"
 	case http.StatusInternalServerError:
 		return "internal_error"
 	default:
@@ -1076,6 +1088,97 @@ func registerEvents(api huma.API, e engine.Engine) {
 		return &struct {
 			Body paginatedEvents `json:"body"`
 		}{Body: resp}, nil
+	})
+}
+
+func registerRBAC(api huma.API, e engine.Engine) {
+	huma.Register(api, huma.Operation{
+		OperationID: "whoami",
+		Method:      http.MethodGet,
+		Path:        "/projects/{project_id}/me/permissions",
+		Summary:     "Current actor permissions",
+	}, func(ctx context.Context, input *struct {
+		ActorID   string `header:"X-Actor-Id" required:"true"`
+		ProjectID string `path:"project_id"`
+	}) (*struct {
+		Body WhoAmIResponse `json:"body"`
+	}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		who, err := e.WhoAmI(ctx, projectID, actorOrDefault(input.ActorID))
+		if err != nil {
+			return nil, handleError(err)
+		}
+		return &struct {
+			Body WhoAmIResponse `json:"body"`
+		}{Body: WhoAmIResponse(who)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "grant-role",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/rbac/roles/grant",
+		Summary:     "Grant role",
+	}, func(ctx context.Context, input *struct {
+		ActorID   string            `header:"X-Actor-Id" required:"true"`
+		ProjectID string            `path:"project_id"`
+		Body      RoleChangeRequest `json:"body"`
+	}) (*struct{}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := e.GrantRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.ActorID, input.Body.RoleID); err != nil {
+			return nil, handleError(err)
+		}
+		return &struct{}{}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "revoke-role",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/rbac/roles/revoke",
+		Summary:     "Revoke role",
+	}, func(ctx context.Context, input *struct {
+		ActorID   string            `header:"X-Actor-Id" required:"true"`
+		ProjectID string            `path:"project_id"`
+		Body      RoleChangeRequest `json:"body"`
+	}) (*struct{}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := e.RevokeRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.ActorID, input.Body.RoleID); err != nil {
+			return nil, handleError(err)
+		}
+		return &struct{}{}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "allow-attestation-role",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/rbac/attestations/allow",
+		Summary:     "Allow attestation role",
+	}, func(ctx context.Context, input *struct {
+		ActorID   string                      `header:"X-Actor-Id" required:"true"`
+		ProjectID string                      `path:"project_id"`
+		Body      AttestationAuthorityRequest `json:"body"`
+	}) (*struct{}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := e.AllowAttestationRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.Kind, input.Body.RoleID); err != nil {
+			return nil, handleError(err)
+		}
+		return &struct{}{}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "deny-attestation-role",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/rbac/attestations/deny",
+		Summary:     "Deny attestation role",
+	}, func(ctx context.Context, input *struct {
+		ActorID   string                      `header:"X-Actor-Id" required:"true"`
+		ProjectID string                      `path:"project_id"`
+		Body      AttestationAuthorityRequest `json:"body"`
+	}) (*struct{}, error) {
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		if err := e.DenyAttestationRole(ctx, projectID, actorOrDefault(input.ActorID), input.Body.Kind, input.Body.RoleID); err != nil {
+			return nil, handleError(err)
+		}
+		return &struct{}{}, nil
 	})
 }
 

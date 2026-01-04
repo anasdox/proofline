@@ -90,6 +90,7 @@ func registerCommands() {
 	rootCmd.AddCommand(attestCmd())
 	rootCmd.AddCommand(logCmd())
 	rootCmd.AddCommand(serveCmd())
+	rootCmd.AddCommand(rbacCmd())
 }
 
 func projectCmd() *cobra.Command {
@@ -915,6 +916,112 @@ func logCmd() *cobra.Command {
 	}
 	log.AddCommand(logTailCmd())
 	return log
+}
+
+func rbacCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "rbac",
+		Short: "RBAC management",
+	}
+	cmd.AddCommand(rbacWhoamiCmd())
+	cmd.AddCommand(rbacGrantCmd())
+	cmd.AddCommand(rbacRevokeCmd())
+	cmd.AddCommand(rbacAllowAttCmd())
+	cmd.AddCommand(rbacDenyAttCmd())
+	return cmd
+}
+
+func rbacWhoamiCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "whoami",
+		Short: "Show current actor roles and permissions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				who, err := e.WhoAmI(ctx, e.Config.Project.ID, viper.GetString("actor-id"))
+				if err != nil {
+					return err
+				}
+				return printJSONOrTable(who)
+			})
+		},
+	}
+	return cmd
+}
+
+func rbacGrantCmd() *cobra.Command {
+	var target, role string
+	cmd := &cobra.Command{
+		Use:   "grant-role",
+		Short: "Grant role to actor",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if target == "" || role == "" {
+				return fmt.Errorf("--actor and --role required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				return e.GrantRole(ctx, e.Config.Project.ID, viper.GetString("actor-id"), target, role)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&target, "actor", "", "actor id")
+	cmd.Flags().StringVar(&role, "role", "", "role id")
+	return cmd
+}
+
+func rbacRevokeCmd() *cobra.Command {
+	var target, role string
+	cmd := &cobra.Command{
+		Use:   "revoke-role",
+		Short: "Revoke role from actor",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if target == "" || role == "" {
+				return fmt.Errorf("--actor and --role required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				return e.RevokeRole(ctx, e.Config.Project.ID, viper.GetString("actor-id"), target, role)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&target, "actor", "", "actor id")
+	cmd.Flags().StringVar(&role, "role", "", "role id")
+	return cmd
+}
+
+func rbacAllowAttCmd() *cobra.Command {
+	var role, kind string
+	cmd := &cobra.Command{
+		Use:   "allow-attestation",
+		Short: "Allow role to issue attestation kind",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if role == "" || kind == "" {
+				return fmt.Errorf("--role and --kind required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				return e.AllowAttestationRole(ctx, e.Config.Project.ID, viper.GetString("actor-id"), kind, role)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&role, "role", "", "role id")
+	cmd.Flags().StringVar(&kind, "kind", "", "attestation kind")
+	return cmd
+}
+
+func rbacDenyAttCmd() *cobra.Command {
+	var role, kind string
+	cmd := &cobra.Command{
+		Use:   "deny-attestation",
+		Short: "Remove role attestation authority",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if role == "" || kind == "" {
+				return fmt.Errorf("--role and --kind required")
+			}
+			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
+				return e.DenyAttestationRole(ctx, e.Config.Project.ID, viper.GetString("actor-id"), kind, role)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&role, "role", "", "role id")
+	cmd.Flags().StringVar(&kind, "kind", "", "attestation kind")
+	return cmd
 }
 
 func serveCmd() *cobra.Command {

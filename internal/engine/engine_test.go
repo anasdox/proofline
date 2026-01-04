@@ -144,6 +144,9 @@ func TestLeaseClaimRelease(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected lease held error")
 	}
+	if err := env.Engine.GrantRole(env.Ctx, "proj-1", "tester", "other", "dev"); err != nil {
+		t.Fatalf("grant role: %v", err)
+	}
 	// wait for expiry
 	time.Sleep(1100 * time.Millisecond)
 	_, err = env.Engine.ClaimLease(env.Ctx, task.ID, "other", 1)

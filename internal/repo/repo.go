@@ -452,6 +452,16 @@ func (r Repo) DeleteLease(ctx context.Context, tx *sql.Tx, taskID string) error 
 	return err
 }
 
+func (r Repo) GetLeaseTx(ctx context.Context, tx *sql.Tx, taskID string) (domain.Lease, error) {
+	var l domain.Lease
+	err := tx.QueryRowContext(ctx, `SELECT task_id,owner_id,acquired_at,expires_at FROM leases WHERE task_id=?`, taskID).
+		Scan(&l.TaskID, &l.OwnerID, &l.AcquiredAt, &l.ExpiresAt)
+	if err == sql.ErrNoRows {
+		return l, ErrNotFound
+	}
+	return l, err
+}
+
 func (r Repo) GetLease(ctx context.Context, taskID string) (domain.Lease, error) {
 	var l domain.Lease
 	err := r.DB.QueryRowContext(ctx, `SELECT task_id,owner_id,acquired_at,expires_at FROM leases WHERE task_id=?`, taskID).
@@ -464,6 +474,12 @@ func (r Repo) GetLease(ctx context.Context, taskID string) (domain.Lease, error)
 
 func (r Repo) InsertAttestation(ctx context.Context, att domain.Attestation) error {
 	_, err := r.DB.ExecContext(ctx, `INSERT INTO attestations(id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json) VALUES (?,?,?,?,?,?,?,?)`,
+		att.ID, att.ProjectID, att.EntityKind, att.EntityID, att.Kind, att.ActorID, att.TS, nullable(att.PayloadJSON))
+	return err
+}
+
+func (r Repo) InsertAttestationTx(ctx context.Context, tx *sql.Tx, att domain.Attestation) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO attestations(id,project_id,entity_kind,entity_id,kind,actor_id,ts,payload_json) VALUES (?,?,?,?,?,?,?,?)`,
 		att.ID, att.ProjectID, att.EntityKind, att.EntityID, att.Kind, att.ActorID, att.TS, nullable(att.PayloadJSON))
 	return err
 }

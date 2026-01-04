@@ -36,11 +36,13 @@ func Open(cfg Config) (*sql.DB, error) {
 	if _, err := EnsureWorkspace(cfg.Workspace); err != nil {
 		return nil, err
 	}
-	dsn := fmt.Sprintf("file:%s?cache=shared&_pragma=foreign_keys(1)", dbPath(cfg.Workspace))
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", dbPath(cfg.Workspace))
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
+	conn.SetMaxOpenConns(1)
+	conn.SetMaxIdleConns(1)
 	return conn, nil
 }
 

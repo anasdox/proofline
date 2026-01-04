@@ -229,6 +229,22 @@ type paginatedEvents struct {
 	NextCursor string          `json:"next_cursor,omitempty"`
 }
 
+type RoleChangeRequest struct {
+	ActorID string `json:"actor_id"`
+	RoleID  string `json:"role_id"`
+}
+
+type AttestationAuthorityRequest struct {
+	Kind   string `json:"kind"`
+	RoleID string `json:"role_id"`
+}
+
+type WhoAmIResponse struct {
+	ActorID     string   `json:"actor_id"`
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
+}
+
 // Conversion helpers
 
 func projectResponse(p domain.Project) ProjectResponse {
