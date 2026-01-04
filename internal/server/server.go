@@ -179,11 +179,39 @@ func registerOpenAPI(r chi.Router, api huma.API, basePath string) {
 	specPath := path.Join(basePath, "openapi.json")
 	r.Get(specPath, func(w http.ResponseWriter, r *http.Request) {
 		if spec == nil {
-			spec, _ = json.Marshal(api.OpenAPI())
+			oas := api.OpenAPI()
+			ensureDefaultErrorResponses(oas)
+			spec, _ = json.Marshal(oas)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(spec)
 	})
+}
+
+func ensureDefaultErrorResponses(oas *huma.OpenAPI) {
+	if oas == nil || oas.Paths == nil {
+		return
+	}
+	for _, item := range oas.Paths {
+		for _, op := range []*huma.Operation{
+			item.Get, item.Put, item.Post, item.Delete, item.Options, item.Head, item.Patch, item.Trace,
+		} {
+			if op == nil {
+				continue
+			}
+			if op.Responses == nil {
+				op.Responses = map[string]*huma.Response{}
+			}
+			op.Responses["default"] = &huma.Response{
+				Description: "Error",
+				Content: map[string]*huma.MediaType{
+					"application/json": {
+						Schema: &huma.Schema{Ref: "#/components/schemas/ApiError"},
+					},
+				},
+			}
+		}
+	}
 }
 
 func swaggerHTML(basePath string) string {
@@ -275,7 +303,9 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Errors: []int{
 			http.StatusBadRequest,
 			http.StatusForbidden,
+			http.StatusNotFound,
 			http.StatusConflict,
+			http.StatusUnprocessableEntity,
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
@@ -353,6 +383,8 @@ func registerProjects(api huma.API, e engine.Engine) {
 			http.StatusBadRequest,
 			http.StatusForbidden,
 			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string `header:"X-Actor-Id" required:"true"`
@@ -387,6 +419,8 @@ func registerProjects(api huma.API, e engine.Engine) {
 		Errors: []int{
 			http.StatusForbidden,
 			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string `header:"X-Actor-Id" required:"true"`
@@ -431,6 +465,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusUnprocessableEntity,
+			http.StatusConflict,
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
@@ -440,6 +475,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body TaskResponse `json:"body"`
 	}, error) {
+		bodyMap := rawBodyMap(ctx)
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
 		}
@@ -448,6 +484,9 @@ func registerTasks(api huma.API, e engine.Engine) {
 		}
 		if input.Body.Type == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "type is required", nil)
+		}
+		if isNullRaw(bodyMap["depends_on"]) {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "depends_on must be array", map[string]any{"field": "depends_on", "reason": "must be array"})
 		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
 		opts := engine.TaskCreateOptions{
@@ -474,6 +513,13 @@ func registerTasks(api huma.API, e engine.Engine) {
 			opts.PolicyPreset = input.Body.Policy.Preset
 		}
 		if input.Body.Validation != nil {
+			var validationMap map[string]json.RawMessage
+			if raw := bodyMap["validation"]; len(raw) > 0 {
+				_ = json.Unmarshal(raw, &validationMap)
+				if isNullRaw(validationMap["require"]) {
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "validation.require must be array", map[string]any{"field": "validation.require", "reason": "must be array"})
+				}
+			}
 			opts.PolicyOverride = true
 			opts.ValidationMode = input.Body.Validation.Mode
 			opts.RequiredKinds = input.Body.Validation.Require
@@ -583,6 +629,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusNotFound,
 			http.StatusConflict,
 			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string            `header:"X-Actor-Id" required:"true"`
@@ -628,11 +675,20 @@ func registerTasks(api huma.API, e engine.Engine) {
 		}
 		opts.AddDeps = input.Body.AddDependsOn
 		opts.RemoveDeps = input.Body.RemoveDependsOn
+		if isNullRaw(bodyMap["add_depends_on"]) {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "add_depends_on must be array", map[string]any{"field": "add_depends_on", "reason": "must be array"})
+		}
+		if isNullRaw(bodyMap["remove_depends_on"]) {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "remove_depends_on must be array", map[string]any{"field": "remove_depends_on", "reason": "must be array"})
+		}
 		if rawValidation, ok := bodyMap["validation"]; ok {
 			opts.PolicyOverride = true
 			var validationMap map[string]json.RawMessage
 			_ = json.Unmarshal(rawValidation, &validationMap)
 			if input.Body.Validation != nil {
+				if isNullRaw(validationMap["require"]) {
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "validation.require must be array", map[string]any{"field": "validation.require", "reason": "must be array"})
+				}
 				if input.Body.Validation.Mode != nil {
 					opts.ValidationModeSet = true
 					opts.ValidationMode = *input.Body.Validation.Mode
@@ -681,6 +737,7 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusNotFound,
 			http.StatusConflict,
 			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string              `header:"X-Actor-Id" required:"true"`
@@ -724,6 +781,8 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID      string `header:"X-Actor-Id" required:"true"`
@@ -758,6 +817,8 @@ func registerTasks(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string `header:"X-Actor-Id" required:"true"`
@@ -868,6 +929,8 @@ func registerIterations(api huma.API, e engine.Engine) {
 			http.StatusBadRequest,
 			http.StatusForbidden,
 			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
@@ -943,6 +1006,8 @@ func registerIterations(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusUnprocessableEntity,
+			http.StatusConflict,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                    `header:"X-Actor-Id" required:"true"`
@@ -983,6 +1048,8 @@ func registerDecisions(api huma.API, e engine.Engine) {
 			http.StatusBadRequest,
 			http.StatusForbidden,
 			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
@@ -992,11 +1059,18 @@ func registerDecisions(api huma.API, e engine.Engine) {
 	}) (*struct {
 		Body DecisionResponse `json:"body"`
 	}, error) {
+		bodyMap := rawBodyMap(ctx)
 		if len(bodyBytes(ctx)) == 0 {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
 		}
 		if input.Body.ID == "" || input.Body.Title == "" || input.Body.Decision == "" || input.Body.DeciderID == "" {
 			return nil, newAPIError(http.StatusBadRequest, "bad_request", "id, title, decision, and decider_id are required", nil)
+		}
+		if isNullRaw(bodyMap["rationale"]) {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "rationale must be array", map[string]any{"field": "rationale", "reason": "must be array"})
+		}
+		if isNullRaw(bodyMap["alternatives"]) {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "alternatives must be array", map[string]any{"field": "alternatives", "reason": "must be array"})
 		}
 		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
 		d := domain.Decision{
@@ -1040,6 +1114,8 @@ func registerAttestations(api huma.API, e engine.Engine) {
 			http.StatusBadRequest,
 			http.StatusForbidden,
 			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusUnprocessableEntity,
 			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
@@ -1092,7 +1168,7 @@ func registerAttestations(api huma.API, e engine.Engine) {
 		Errors:      []int{http.StatusBadRequest},
 	}, func(ctx context.Context, input *struct {
 		ProjectID  string `path:"project_id"`
-		EntityKind string `query:"entity_kind"`
+		EntityKind string `query:"entity_kind" enum:"project,iteration,task,decision"`
 		EntityID   string `query:"entity_id"`
 		Kind       string `query:"kind"`
 		Limit      int    `query:"limit" default:"50"`
@@ -1142,7 +1218,7 @@ func registerEvents(api huma.API, e engine.Engine) {
 	}, func(ctx context.Context, input *struct {
 		ProjectID  string `path:"project_id"`
 		Type       string `query:"type"`
-		EntityKind string `query:"entity_kind"`
+		EntityKind string `query:"entity_kind" enum:"project,iteration,task,decision,rbac"`
 		EntityID   string `query:"entity_id"`
 		Limit      int    `query:"limit" default:"50"`
 		Cursor     string `query:"cursor"`
@@ -1216,6 +1292,8 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string            `header:"X-Actor-Id" required:"true"`
@@ -1239,6 +1317,8 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string            `header:"X-Actor-Id" required:"true"`
@@ -1262,6 +1342,8 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                      `header:"X-Actor-Id" required:"true"`
@@ -1285,6 +1367,8 @@ func registerRBAC(api huma.API, e engine.Engine) {
 			http.StatusForbidden,
 			http.StatusNotFound,
 			http.StatusConflict,
+			http.StatusUnprocessableEntity,
+			http.StatusInternalServerError,
 		},
 	}, func(ctx context.Context, input *struct {
 		ActorID   string                      `header:"X-Actor-Id" required:"true"`
@@ -1327,6 +1411,11 @@ func rawBodyMap(ctx context.Context) map[string]json.RawMessage {
 		}
 	}
 	return outer
+}
+
+func isNullRaw(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) > 0 && bytes.Equal(trimmed, []byte("null"))
 }
 
 func normalizeLimit(in int) int {

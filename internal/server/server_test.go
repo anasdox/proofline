@@ -228,6 +228,55 @@ func TestValidationArraysAreNonNull(t *testing.T) {
 	}
 }
 
+func TestNullArrayRequestsRejected(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title":      "Bad deps",
+		"type":       "technical",
+		"depends_on": nil,
+	}, nil)
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.StatusCode, string(data))
+	}
+	var apiErr struct {
+		Error apiErrorBody `json:"error"`
+	}
+	_ = json.Unmarshal(data, &apiErr)
+	if apiErr.Error.Code != "bad_request" || apiErr.Error.Details == nil || apiErr.Error.Details["field"] != "depends_on" {
+		t.Fatalf("unexpected error: %+v", apiErr)
+	}
+
+	patchRes, patchData := doJSON(t, client, http.MethodPatch, srv.URL+"/v0/projects/"+projectID+"/tasks/task-x", map[string]any{
+		"add_depends_on": nil,
+	}, nil)
+	if patchRes.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", patchRes.StatusCode, string(patchData))
+	}
+	_ = json.Unmarshal(patchData, &apiErr)
+	if apiErr.Error.Details == nil || apiErr.Error.Details["field"] != "add_depends_on" {
+		t.Fatalf("unexpected details: %+v", apiErr)
+	}
+
+	decRes, decData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/decisions", map[string]any{
+		"id":          "dec-bad",
+		"title":       "Bad",
+		"decision":    "none",
+		"decider_id":  "cto",
+		"rationale":   nil,
+		"alternatives": nil,
+	}, nil)
+	if decRes.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", decRes.StatusCode, string(decData))
+	}
+	_ = json.Unmarshal(decData, &apiErr)
+	if apiErr.Error.Details == nil || apiErr.Error.Details["field"] != "rationale" {
+		t.Fatalf("unexpected decision details: %+v", apiErr)
+	}
+}
 func TestTaskDefaultsForDependsOnAndCompletedAt(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
@@ -269,6 +318,45 @@ func TestTaskDefaultsForDependsOnAndCompletedAt(t *testing.T) {
 	}
 	if completed != nil {
 		t.Fatalf("expected completed_at null, got %v", completed)
+	}
+	reqAtt, ok := payload["required_attestations"]
+	if !ok {
+		t.Fatalf("required_attestations missing")
+	}
+	reqSlice, ok := reqAtt.([]any)
+	if !ok || reqSlice == nil {
+		t.Fatalf("required_attestations not array: %#v", reqAtt)
+	}
+}
+
+func TestDecisionArraysPresent(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/decisions", map[string]any{
+		"id":         "dec-no-arrays",
+		"title":      "Choose db",
+		"decision":   "Use sqlite",
+		"decider_id": "cto",
+	}, nil)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create decision: %d %s", res.StatusCode, string(data))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal decision: %v", err)
+	}
+	for _, key := range []string{"alternatives", "rationale"} {
+		val, ok := payload[key]
+		if !ok {
+			t.Fatalf("%s missing", key)
+		}
+		arr, ok := val.([]any)
+		if !ok || arr == nil {
+			t.Fatalf("%s not array: %#v", key, val)
+		}
 	}
 }
 
@@ -468,6 +556,139 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 	}
 	spec := fetchOpenAPISpec(t, srv)
 	assertResponseDocumented(t, spec, "/v0/projects/{project_id}/attestations", http.MethodPost, "403")
+}
+
+func TestWhoAmIResponsesHaveArrays(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/me/permissions", nil, map[string]string{"X-Actor-Id": "tester"})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("whoami status %d: %s", res.StatusCode, string(data))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal whoami: %v", err)
+	}
+	for _, key := range []string{"roles", "permissions"} {
+		val, ok := payload[key]
+		if !ok {
+			t.Fatalf("%s missing", key)
+		}
+		arr, ok := val.([]any)
+		if !ok || arr == nil {
+			t.Fatalf("%s not array: %#v", key, val)
+		}
+	}
+}
+
+func TestProjectsListArrayShape(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	client := srv.Client()
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects", nil, nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("list projects status %d: %s", res.StatusCode, string(data))
+	}
+	var payload []any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal projects: %v", err)
+	}
+	if payload == nil {
+		t.Fatalf("projects array is nil")
+	}
+}
+
+func TestTreeChildrenIncludedForLeaves(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+
+	parentRes, parentBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"id":    "parent-1",
+		"title": "Parent task",
+		"type":  "technical",
+	}, nil)
+	if parentRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create parent: %d %s", parentRes.StatusCode, string(parentBody))
+	}
+	childRes, childBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"id":       "child-1",
+		"title":    "Child task",
+		"type":     "technical",
+		"parent_id": "parent-1",
+	}, nil)
+	if childRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create child: %d %s", childRes.StatusCode, string(childBody))
+	}
+
+	treeRes, treeBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/tasks/tree", nil, nil)
+	if treeRes.StatusCode != http.StatusOK {
+		t.Fatalf("task tree status %d: %s", treeRes.StatusCode, string(treeBody))
+	}
+	var tree []map[string]any
+	if err := json.Unmarshal(treeBody, &tree); err != nil {
+		t.Fatalf("unmarshal tree: %v", err)
+	}
+	if len(tree) == 0 {
+		t.Fatalf("expected tree nodes")
+	}
+	for _, node := range tree {
+		children, ok := node["children"]
+		if !ok {
+			t.Fatalf("children missing on node")
+		}
+		childArr, ok := children.([]any)
+		if !ok || childArr == nil {
+			t.Fatalf("children not array: %#v", children)
+		}
+		for _, maybeLeaf := range childArr {
+			leaf, ok := maybeLeaf.(map[string]any)
+			if !ok {
+				continue
+			}
+			leafChildren, ok := leaf["children"]
+			if !ok {
+				t.Fatalf("leaf children missing")
+			}
+			leafArr, ok := leafChildren.([]any)
+			if !ok || leafArr == nil {
+				t.Fatalf("leaf children not array: %#v", leafChildren)
+			}
+		}
+	}
+}
+
+func TestEventEntityKindEnum(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "proofline"
+	client := srv.Client()
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/events?limit=1", nil, nil)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("events status %d: %s", res.StatusCode, string(data))
+	}
+	var payload struct {
+		Items []EventResponse `json:"items"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("unmarshal events: %v", err)
+	}
+	allowed := map[string]struct{}{
+		"project":   {},
+		"iteration": {},
+		"task":      {},
+		"decision":  {},
+		"rbac":      {},
+	}
+	for _, evt := range payload.Items {
+		if _, ok := allowed[evt.EntityKind]; !ok {
+			t.Fatalf("unexpected entity_kind: %s", evt.EntityKind)
+		}
+	}
 }
 
 func TestRoleGrantAllowsClaim(t *testing.T) {
