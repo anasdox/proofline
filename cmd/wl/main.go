@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,23 +16,23 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"proofline/internal/app"
-	"proofline/internal/config"
-	"proofline/internal/db"
-	"proofline/internal/domain"
-	"proofline/internal/engine"
-	"proofline/internal/migrate"
-	"proofline/internal/repo"
-	"proofline/internal/server"
+	"workline/internal/app"
+	"workline/internal/config"
+	"workline/internal/db"
+	"workline/internal/domain"
+	"workline/internal/engine"
+	"workline/internal/migrate"
+	"workline/internal/repo"
+	"workline/internal/server"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "pl",
-	Short: "Proofline CLI",
-	Long: `Proofline tracks project work with attestations and policy-driven validation.
+	Use:   "wl",
+	Short: "Workline CLI",
+	Long: `Workline tracks project work with attestations and policy-driven validation.
 Core concepts (kid-friendly):
 - Why it matters: attestations are proof stickers and policies are the rules; together they stop "done" from being just a checkbox and keep quality consistent without nagging.
-- Workspace: your .proofline toy box with only the database; configs are stored in the DB and imported explicitly.
+- Workspace: your .workline toy box with only the database; configs are stored in the DB and imported explicitly.
 - Project: the one big game inside that box that owns all tasks, iterations, and evidence.
 - Policies: presets say what proof a task needs (none/all/any/threshold of attestation kinds); task types map to presets by default.
 - Definition of Ready (DoR): proof stickers that say a task is ready to start (requirements accepted, design reviewed, scope groomed).
@@ -38,8 +40,8 @@ Core concepts (kid-friendly):
 - Tasks: work items with parents/deps/leases; statuses go planned -> in_progress -> review -> done (rejected/canceled are exits).
 - Iterations: smaller adventures that move pending -> running -> delivered -> validated/rejected; validation can require a catalog attestation.
 - Attestations: proof stickers like ci.passed or review.approved that satisfy policies.
-- Leases: temporary "I’m working on this" tags (pl task claim/release).
-- Event log: diary of changes, view with 'pl log tail'.`,
+- Leases: temporary "I’m working on this" tags (wl task claim/release).
+- Event log: diary of changes, view with 'wl log tail'.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		workspace := viper.GetString("workspace")
 		if _, err := db.EnsureWorkspace(workspace); err != nil {
@@ -60,6 +62,8 @@ func main() {
 }
 
 func initConfig() {
+	viper.SetEnvPrefix("WORKLINE")
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	viper.AutomaticEnv()
 }
 
@@ -97,6 +101,7 @@ func projectCmd() *cobra.Command {
 	prj.AddCommand(projectUpdateCmd())
 	prj.AddCommand(projectDeleteCmd())
 	prj.AddCommand(projectConfigCmd())
+	prj.AddCommand(projectUseCmd())
 	return prj
 }
 
@@ -221,6 +226,27 @@ func projectDeleteCmd() *cobra.Command {
 				}
 				return e.Repo.DeleteProject(ctx, target)
 			})
+		},
+	}
+	return cmd
+}
+
+func projectUseCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "use <id>",
+		Short: "Set current project for this workspace",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			projectID := strings.TrimSpace(args[0])
+			if projectID == "" {
+				return fmt.Errorf("project id is required")
+			}
+			workspace := viper.GetString("workspace")
+			if err := setEnvValue(filepath.Join(workspace, ".env"), "WORKLINE_DEFAULT_PROJECT", projectID); err != nil {
+				return err
+			}
+			fmt.Printf("Set WORKLINE_DEFAULT_PROJECT=%s in %s/.env\n", projectID, workspace)
+			return nil
 		},
 	}
 	return cmd
@@ -710,7 +736,7 @@ func configCmd() *cobra.Command {
 	cfg := &cobra.Command{
 		Use:   "config",
 		Short: "Inspect project config",
-		Long:  "Config is the rulebook (proofline.yml): project id/kind, attestation catalog, and policy presets/defaults that decide which proof is needed. All commands read it before acting.",
+		Long:  "Config is the rulebook (stored in DB): project id/kind, attestation catalog, and policy presets/defaults that decide which proof is needed. Import from workline.yml if desired.",
 	}
 	cfg.AddCommand(configShowCmd())
 	cfg.AddCommand(configValidateCmd())
@@ -1004,9 +1030,9 @@ func serveCmd() *cobra.Command {
 				return err
 			}
 			e := engine.New(conn, cfg)
-			authCfg := server.AuthConfig{JWTSecret: os.Getenv("JWT_SECRET")}
+			authCfg := server.AuthConfig{JWTSecret: os.Getenv("WORKLINE_JWT_SECRET")}
 			if authCfg.JWTSecret == "" {
-				return fmt.Errorf("JWT_SECRET is required for bearer auth")
+				return fmt.Errorf("WORKLINE_JWT_SECRET is required for bearer auth")
 			}
 			handler, err := server.New(server.Config{Engine: e, BasePath: basePath, Auth: authCfg})
 			if err != nil {
@@ -1019,7 +1045,7 @@ func serveCmd() *cobra.Command {
 				defer cancel()
 				srv.Shutdown(ctx)
 			}()
-			fmt.Printf("Serving Proofline API on http://%s%s (OpenAPI at /openapi.json, Swagger UI at /docs)\n", addr, basePath)
+			fmt.Printf("Serving Workline API on http://%s%s (OpenAPI at /openapi.json, Swagger UI at /docs)\n", addr, basePath)
 			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				return err
 			}
@@ -1093,6 +1119,39 @@ func printJSON(v any) error {
 func toJSONArray(items []string) string {
 	b, _ := json.Marshal(items)
 	return string(b)
+}
+
+func setEnvValue(path, key, value string) error {
+	var lines []string
+	seen := false
+	f, err := os.Open(path)
+	if err == nil {
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, key+"=") {
+				lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+				seen = true
+			} else {
+				lines = append(lines, line)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			f.Close()
+			return err
+		}
+		f.Close()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if !seen {
+		lines = append(lines, fmt.Sprintf("%s=%s", key, value))
+	}
+	content := strings.Join(lines, "\n")
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
 }
 
 func printTaskTree(t domain.Task, children map[string][]domain.Task, prefix string, last bool) {

@@ -1,25 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-}"
-DESCRIPTION="${DESCRIPTION:-}"
-WORKSPACE="${WORKSPACE:-.}"
-GOCACHE="${GOCACHE:-${WORKSPACE}/.cache/go-build}"
+WORKLINE_WORKSPACE="${WORKLINE_WORKSPACE:-.}"
+WORKLINE_GOCACHE="${WORKLINE_GOCACHE:-${WORKLINE_WORKSPACE}/.cache/go-build}"
 
-if [ -n "${PROJECT_ID}" ]; then
-  echo "==> Using project id: ${PROJECT_ID}"
-else
-  echo "==> Using project id from config (if present)"
-fi
-echo "==> Workspace: ${WORKSPACE}"
-echo "==> Go cache: ${GOCACHE}"
+echo "==> Workspace: ${WORKLINE_WORKSPACE}"
+echo "==> Go cache: ${WORKLINE_GOCACHE}"
 
 echo "==> Downloading Go modules"
-GOCACHE="${GOCACHE}" go mod download
+GOCACHE="${WORKLINE_GOCACHE}" go mod download
 
-if [ -n "${CONFIG_FILE:-}" ]; then
-  echo "==> Importing config into DB: ${CONFIG_FILE}"
-  GOCACHE="${GOCACHE}" go run ./cmd/pl project config import --file "${CONFIG_FILE}" --workspace "${WORKSPACE}"
+if [ -n "${WORKLINE_DEFAULT_PROJECT_CONFIG_FILE:-}" ]; then
+  echo "==> Importing config into DB: ${WORKLINE_DEFAULT_PROJECT_CONFIG_FILE}"
+  GOCACHE="${WORKLINE_GOCACHE}" go run ./cmd/wl project config import --file "${WORKLINE_DEFAULT_PROJECT_CONFIG_FILE}" --workspace "${WORKLINE_WORKSPACE}"
 fi
 
-echo "Done. DB will be created on first command if missing at ${WORKSPACE}/.proofline/proofline.db"
+echo "Done. DB will be created on first command if missing at ${WORKLINE_WORKSPACE}/.workline/workline.db"

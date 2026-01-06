@@ -15,12 +15,12 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"proofline/internal/config"
-	"proofline/internal/db"
-	"proofline/internal/domain"
-	"proofline/internal/engine"
-	"proofline/internal/migrate"
-	"proofline/internal/repo"
+	"workline/internal/config"
+	"workline/internal/db"
+	"workline/internal/domain"
+	"workline/internal/engine"
+	"workline/internal/migrate"
+	"workline/internal/repo"
 )
 
 type authContext struct {
@@ -66,7 +66,7 @@ func newTestServerWithAuth(t *testing.T, authCfg AuthConfig) (*testServer, func(
 	if _, err := db.EnsureWorkspace(workspace); err != nil {
 		t.Fatalf("ensure workspace: %v", err)
 	}
-	cfg := config.Default("proofline")
+	cfg := config.Default("workline")
 	conn, err := db.Open(db.Config{Workspace: workspace})
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -232,7 +232,7 @@ func TestAuthBearerToken(t *testing.T) {
 	client := srv.Client()
 
 token := srv.bearerToken(t, "jwt-user", "default-org", time.Now().Add(time.Hour))
-	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/proofline/me/permissions", nil, bearerHeader(token))
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/workline/me/permissions", nil, bearerHeader(token))
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("whoami via bearer: %d %s", res.StatusCode, string(data))
 	}
@@ -278,7 +278,7 @@ func TestAuthAPIKey(t *testing.T) {
 	defer cleanup()
 	client := srv.Client()
 
-	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/proofline/me/permissions", nil, map[string]string{"X-Api-Key": srv.apiKey, "Authorization": ""})
+	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/workline/me/permissions", nil, map[string]string{"X-Api-Key": srv.apiKey, "Authorization": ""})
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("api key whoami status %d: %s", res.StatusCode, string(data))
 	}
@@ -329,7 +329,7 @@ func TestAuthMissing(t *testing.T) {
 func TestEmptyPaginationArrays(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	assertItems := func(endpoint string) {
@@ -372,7 +372,7 @@ func TestEmptyPaginationArrays(t *testing.T) {
 func TestValidationArraysAreNonNull(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -411,7 +411,7 @@ func TestValidationArraysAreNonNull(t *testing.T) {
 func TestNullArrayRequestsRejected(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -460,7 +460,7 @@ func TestNullArrayRequestsRejected(t *testing.T) {
 func TestTaskDefaultsForDependsOnAndCompletedAt(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -512,7 +512,7 @@ func TestTaskDefaultsForDependsOnAndCompletedAt(t *testing.T) {
 func TestDecisionArraysPresent(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/decisions", map[string]any{
@@ -543,7 +543,7 @@ func TestDecisionArraysPresent(t *testing.T) {
 func TestTaskDoneWithAttestations(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 
 	client := srv.Client()
 	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -600,7 +600,7 @@ func TestTaskDoneWithAttestations(t *testing.T) {
 func TestLeaseConflict(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -636,7 +636,7 @@ claim2Token := srv.bearerToken(t, "other", "default-org", time.Now().Add(time.Ho
 func TestIterationValidationBlocked(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/iterations", map[string]any{
@@ -672,7 +672,7 @@ func TestIterationValidationBlocked(t *testing.T) {
 func TestUnauthorizedTaskCreate(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -699,7 +699,7 @@ func TestUnauthorizedTaskCreate(t *testing.T) {
 func TestUnauthorizedAttestationKind(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -742,7 +742,7 @@ func TestUnauthorizedAttestationKind(t *testing.T) {
 func TestWhoAmIResponsesHaveArrays(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/me/permissions", nil, nil)
@@ -785,7 +785,7 @@ func TestProjectsListArrayShape(t *testing.T) {
 func TestTreeChildrenIncludedForLeaves(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	parentRes, parentBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -846,7 +846,7 @@ func TestTreeChildrenIncludedForLeaves(t *testing.T) {
 func TestEventEntityKindEnum(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/events?limit=1", nil, nil)
 	if res.StatusCode != http.StatusOK {
@@ -875,7 +875,7 @@ func TestEventEntityKindEnum(t *testing.T) {
 func TestRoleGrantAllowsClaim(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -906,7 +906,7 @@ devToken := srv.bearerToken(t, "dev-1", "default-org", time.Now().Add(time.Hour)
 func TestForceRequiresPermission(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	taskRes, taskData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -945,7 +945,7 @@ func TestForceRequiresPermission(t *testing.T) {
 func TestCreateTaskValidation(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{}, nil)
@@ -964,7 +964,7 @@ func TestCreateTaskValidation(t *testing.T) {
 func TestDoneTaskRequiresValidation(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -1000,7 +1000,7 @@ func TestDoneTaskRequiresValidation(t *testing.T) {
 func TestConfigEndpoint(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	res, data := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/config", nil, nil)
@@ -1019,7 +1019,7 @@ func TestConfigEndpoint(t *testing.T) {
 func TestValidationEndpoint(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
@@ -1064,7 +1064,7 @@ func TestValidationEndpoint(t *testing.T) {
 func TestPaginationProvidesCursor(t *testing.T) {
 	srv, cleanup := newTestServer(t)
 	defer cleanup()
-	projectID := "proofline"
+	projectID := "workline"
 	client := srv.Client()
 
 	for i := 0; i < 3; i++ {

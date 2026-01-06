@@ -46,7 +46,7 @@ class APIError(RuntimeError):
         self.body = body
 
 
-class ProoflineClient:
+class WorklineClient:
     def __init__(
         self,
         base_url: str,

@@ -10,11 +10,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"proofline/internal/config"
-	"proofline/internal/domain"
-	"proofline/internal/engine/auth"
-	"proofline/internal/events"
-	"proofline/internal/repo"
+	"workline/internal/config"
+	"workline/internal/domain"
+	"workline/internal/engine/auth"
+	"workline/internal/events"
+	"workline/internal/repo"
 )
 
 type Engine struct {

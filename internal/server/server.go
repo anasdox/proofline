@@ -16,11 +16,11 @@ import (
 	humachi "github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 
-	"proofline/internal/config"
-	"proofline/internal/domain"
-	"proofline/internal/engine"
-	"proofline/internal/engine/auth"
-	"proofline/internal/repo"
+	"workline/internal/config"
+	"workline/internal/domain"
+	"workline/internal/engine"
+	"workline/internal/engine/auth"
+	"workline/internal/repo"
 )
 
 // Config for the HTTP API handler.
@@ -48,7 +48,7 @@ type apiError struct {
 func (e *apiError) GetStatus() int { return e.status }
 func (e *apiError) Error() string  { return e.Body.Message }
 
-// New returns an HTTP handler exposing the Proofline API.
+// New returns an HTTP handler exposing the Workline API.
 func New(cfg Config) (http.Handler, error) {
 	basePath := cfg.BasePath
 	if basePath == "" {
@@ -85,7 +85,7 @@ func New(cfg Config) (http.Handler, error) {
 		})
 	})
 	router.Use(newAuthMiddleware(basePath, cfg.Auth, cfg.Engine.Repo))
-	hcfg := huma.DefaultConfig("Proofline API", "0.1.1")
+	hcfg := huma.DefaultConfig("Workline API", "0.1.1")
 	hcfg.OpenAPIPath = "/openapi"
 	hcfg.DocsPath = "" // custom Swagger UI below
 	api := humachi.New(router, hcfg)
@@ -282,7 +282,7 @@ func swaggerHTML(basePath string) string {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Proofline API Docs</title>
+    <title>Workline API Docs</title>
     <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
   </head>
   <body>

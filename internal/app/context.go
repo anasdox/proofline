@@ -4,24 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
-	"proofline/internal/config"
-	"proofline/internal/domain"
-	"proofline/internal/repo"
+	"workline/internal/config"
+	"workline/internal/domain"
+	"workline/internal/repo"
 )
 
 // ResolveProjectAndConfig picks the active project and ensures a project + config exist in DB,
-// seeding defaults if missing. It prefers overrides, then single-project DB.
+// seeding defaults if missing. It prefers overrides, then WORKLINE_DEFAULT_PROJECT.
 // If the project does not exist, it is created on the fly.
 func ResolveProjectAndConfig(ctx context.Context, workspace, projectOverride, actorID string, r repo.Repo) (string, *config.Config, error) {
 	projectID := projectOverride
 	if projectID == "" {
-		if p, err := r.SingleProject(ctx); err == nil {
-			projectID = p.ID
-		} else {
-			return "", nil, fmt.Errorf("project not specified; use --project")
-		}
+		projectID = os.Getenv("WORKLINE_DEFAULT_PROJECT")
+	}
+	if projectID == "" {
+		return "", nil, fmt.Errorf("project not specified; use --project or set WORKLINE_DEFAULT_PROJECT (wl project use <id>)")
 	}
 	seedCfg := config.Default(projectID)
 

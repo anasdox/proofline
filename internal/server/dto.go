@@ -3,8 +3,8 @@ package server
 import (
 	"encoding/json"
 
-	"proofline/internal/config"
-	"proofline/internal/domain"
+	"workline/internal/config"
+	"workline/internal/domain"
 )
 
 // Request payloads
@@ -109,7 +109,7 @@ type IterationResponse struct {
 type TaskResponse struct {
 	ID                   string         `json:"id" example:"task-auth-1"`
 	OrgID                string         `json:"org_id" example:"org-1"`
-	ProjectID            string         `json:"project_id" example:"proofline"`
+	ProjectID            string         `json:"project_id" example:"workline"`
 	IterationID          *string        `json:"iteration_id,omitempty" example:"iter-1"`
 	ParentID             *string        `json:"parent_id,omitempty" example:"task-epic"`
 	Type                 string         `json:"type" enum:"technical,feature,bug,docs,chore" example:"feature"`

@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config models proofline.yml.
+// Config models workline.yml.
 type Config struct {
 	Project struct {
 		ID   string `yaml:"id"`
@@ -52,7 +52,7 @@ func Load(workspace string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("config %s not found; run pl init", path)
+			return nil, fmt.Errorf("config %s not found; import with wl project config import --file <path>", path)
 		}
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func Path(workspace string) string {
 	if workspace == "" {
 		workspace = "."
 	}
-	return filepath.Join(workspace, "proofline.yml")
+	return filepath.Join(workspace, "workline.yml")
 }
 
 // GenerateDefault returns default config YAML.

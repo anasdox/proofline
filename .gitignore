@@ -1,5 +1,5 @@
 # Binaries (root only)
-/pl
+/wl
 
 # Build caches
 .gocache/
@@ -7,8 +7,8 @@
 .cache/
 
 # Workspace data
-.proofline/
-proofline.yml
+.workline/
+workline.yml
 
 # Editor
 .DS_Store

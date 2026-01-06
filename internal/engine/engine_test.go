@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"proofline/internal/config"
-	"proofline/internal/db"
-	"proofline/internal/domain"
-	"proofline/internal/engine"
-	"proofline/internal/migrate"
+	"workline/internal/config"
+	"workline/internal/db"
+	"workline/internal/domain"
+	"workline/internal/engine"
+	"workline/internal/migrate"
 )
 
 type testEnv struct {

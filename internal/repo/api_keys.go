@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"proofline/internal/domain"
+	"workline/internal/domain"
 )
 
 // HashAPIKey returns a stable SHA-256 hex digest for the provided key.

@@ -9,7 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const defaultDBName = "proofline.db"
+const defaultDBName = "workline.db"
 
 type Config struct {
 	Workspace string
@@ -19,12 +19,12 @@ func dbPath(workspace string) string {
 	if workspace == "" {
 		workspace = "."
 	}
-	return filepath.Join(workspace, ".proofline", defaultDBName)
+	return filepath.Join(workspace, ".workline", defaultDBName)
 }
 
 // EnsureWorkspace creates workspace directory if missing.
 func EnsureWorkspace(workspace string) (string, error) {
-	path := filepath.Join(workspace, ".proofline")
+	path := filepath.Join(workspace, ".workline")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", err
 	}

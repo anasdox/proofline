@@ -1,4 +1,4 @@
-package prooflinesdk
+package worklinesdk
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Client is a minimal Proofline HTTP API client.
+// Client is a minimal Workline HTTP API client.
 type Client struct {
 	BaseURL     string
 	ProjectID   string

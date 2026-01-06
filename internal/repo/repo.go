@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"proofline/internal/config"
-	"proofline/internal/domain"
+	"workline/internal/config"
+	"workline/internal/domain"
 )
 
 type Repo struct {

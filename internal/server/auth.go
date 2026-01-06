@@ -13,7 +13,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
 
-	"proofline/internal/repo"
+	"workline/internal/repo"
 )
 
 type AuthConfig struct {
