@@ -203,6 +203,67 @@ func TestPolicyEvaluation(t *testing.T) {
 	}
 }
 
+func TestSeedRBACFromConfig(t *testing.T) {
+	dir := t.TempDir()
+	conn, err := db.Open(db.Config{Workspace: dir})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := migrate.Migrate(conn); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	cfg := config.Default("proj-1")
+	cfg.RBAC.Roles = map[string]config.RBACRole{
+		"owner": {
+			Description: "Owner",
+			Permissions: []string{"project.read", "task.list"},
+		},
+		"observer": {
+			Description: "Observer",
+			Permissions: []string{"project.read"},
+		},
+	}
+	cfg.RBAC.AttestationAuthorities = map[string][]string{
+		"ci.passed": {"owner"},
+	}
+	eng := engine.New(conn, cfg)
+	eng.Now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
+	ctx := context.Background()
+	if _, err := eng.InitProject(ctx, "proj-1", "test", "tester"); err != nil {
+		t.Fatalf("init project: %v", err)
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	defer tx.Rollback()
+	perms, err := eng.Auth.ActorPermissions(ctx, tx, "proj-1", "tester")
+	if err != nil {
+		t.Fatalf("perms: %v", err)
+	}
+	got := map[string]bool{}
+	for _, p := range perms {
+		got[p] = true
+	}
+	if len(got) != 2 || !got["project.read"] || !got["task.list"] {
+		t.Fatalf("unexpected permissions: %v", perms)
+	}
+	ok, err := eng.Auth.ActorCanAttest(ctx, tx, "proj-1", "tester", "ci.passed")
+	if err != nil {
+		t.Fatalf("attest check: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected attestation allowed")
+	}
+	ok, err = eng.Auth.ActorCanAttest(ctx, tx, "proj-1", "tester", "review.approved")
+	if err != nil {
+		t.Fatalf("attest check: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected attestation denied")
+	}
+}
+
 func TestAttestationEventLogged(t *testing.T) {
 	env := newTestEnv(t)
 	att, err := env.Engine.AddAttestation(env.Ctx, domain.Attestation{

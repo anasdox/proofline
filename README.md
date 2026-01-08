@@ -42,6 +42,7 @@ Configuration
 - You can import overrides from a YAML file: `wl project config import --file workline.example.yml` (or any file you choose).
 - Inspect/validate: `wl config show` and `wl config validate` (or `--json`).
 - Project selection: `--project` overrides; otherwise `WORKLINE_DEFAULT_PROJECT` is required (set via `wl project use <id>`). Config seeding happens only when the project has no stored config.
+- Optional RBAC config: define `rbac.roles` with permission lists and `rbac.attestation_authorities` to control which roles can attest to which kinds.
 - Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit validation flags (`--validation-mode`, `--require`, `--threshold`), which emit `policy.override`.
 - Iteration validation uses `policies.defaults.iteration.validation.require`; missing value means no attestation is required.
 

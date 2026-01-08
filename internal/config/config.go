@@ -31,12 +31,21 @@ type Config struct {
 			} `yaml:"iteration"`
 		} `yaml:"defaults"`
 	} `yaml:"policies"`
+	RBAC struct {
+		Roles                  map[string]RBACRole `yaml:"roles"`
+		AttestationAuthorities map[string][]string `yaml:"attestation_authorities"`
+	} `yaml:"rbac"`
 }
 
 type PolicyPreset struct {
 	Mode      string   `yaml:"mode"`
 	Require   []string `yaml:"require"`
 	Threshold *int     `yaml:"threshold"`
+}
+
+type RBACRole struct {
+	Description string   `yaml:"description"`
+	Permissions []string `yaml:"permissions"`
 }
 
 var allowedModes = map[string]struct{}{
@@ -105,6 +114,36 @@ func (c *Config) Validate() error {
 	if requiredKind != "" && len(c.Attestations.Catalog) > 0 {
 		if _, ok := c.Attestations.Catalog[requiredKind]; !ok {
 			return fmt.Errorf("iteration validation requires unknown attestation kind %s", requiredKind)
+		}
+	}
+	if len(c.RBAC.Roles) > 0 {
+		if _, ok := c.RBAC.Roles["owner"]; !ok {
+			return fmt.Errorf("config.rbac.roles must include owner")
+		}
+		for roleID, role := range c.RBAC.Roles {
+			if roleID == "" {
+				return fmt.Errorf("config.rbac.roles contains empty role id")
+			}
+			for _, perm := range role.Permissions {
+				if perm == "" {
+					return fmt.Errorf("role %s has empty permission id", roleID)
+				}
+			}
+		}
+	}
+	for kind, roles := range c.RBAC.AttestationAuthorities {
+		if kind == "" {
+			return fmt.Errorf("config.rbac.attestation_authorities has empty kind")
+		}
+		for _, roleID := range roles {
+			if roleID == "" {
+				return fmt.Errorf("attestation kind %s has empty role id", kind)
+			}
+			if len(c.RBAC.Roles) > 0 {
+				if _, ok := c.RBAC.Roles[roleID]; !ok {
+					return fmt.Errorf("attestation kind %s references unknown role %s", kind, roleID)
+				}
+			}
 		}
 	}
 	return nil

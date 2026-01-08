@@ -58,3 +58,54 @@ policies:
     iteration:
       validation:
         require: iteration.approved
+
+rbac:
+  roles:
+    owner:
+      description: "Project owner"
+      permissions:
+        - project.create
+        - project.list
+        - project.read
+        - project.update
+        - project.delete
+        - project.config.read
+        - project.status.read
+        - project.events.read
+        - task.create
+        - task.list
+        - task.read
+        - task.tree
+        - task.validation.read
+        - task.update
+        - task.done
+        - task.claim
+        - task.release
+        - iteration.create
+        - iteration.list
+        - iteration.set_status
+        - decision.create
+        - attestation.add
+        - attestation.list
+        - rbac.manage
+        - force.use
+    observer:
+      description: "Read-only observer"
+      permissions:
+        - project.list
+        - project.read
+        - project.config.read
+        - project.status.read
+        - project.events.read
+        - task.list
+        - task.read
+        - task.tree
+        - task.validation.read
+        - iteration.list
+        - attestation.list
+  attestation_authorities:
+    ci.passed: [owner]
+    review.approved: [owner]
+    acceptance.passed: [owner]
+    security.ok: [owner]
+    iteration.approved: [owner]

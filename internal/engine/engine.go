@@ -78,7 +78,7 @@ func (e Engine) InitProject(ctx context.Context, projectID, description, actorID
 	if err := e.Repo.UpsertProjectConfigTx(ctx, tx, p.ID, seedCfg); err != nil {
 		return domain.Project{}, fmt.Errorf("insert project config: %w", err)
 	}
-	if err := e.seedRBAC(ctx, tx, p.ID, actorID); err != nil {
+	if err := e.seedRBAC(ctx, tx, p.ID, actorID, seedCfg); err != nil {
 		return domain.Project{}, err
 	}
 	if err := e.Repo.AssignOrgRole(ctx, tx, orgID, actorID, "owner"); err != nil {
@@ -1218,26 +1218,10 @@ func nullable(v string) any {
 	return v
 }
 
-func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID string) error {
+func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID string, cfg *config.Config) error {
 	now := e.now().UTC().Format(time.RFC3339)
 	if err := e.Auth.EnsureActor(ctx, tx, actorID); err != nil {
 		return err
-	}
-	roleDescs := map[string]string{
-		"owner":    "Project owner",
-		"pm":       "Project manager",
-		"po":       "Product owner",
-		"dev":      "Developer",
-		"reviewer": "Reviewer",
-		"qa":       "Quality assurance",
-		"security": "Security",
-		"release":  "Release manager",
-		"observer": "Read-only observer",
-	}
-	for role, desc := range roleDescs {
-		if err := e.Repo.InsertRole(ctx, tx, role, desc); err != nil {
-			return err
-		}
 	}
 	permDescs := map[string]string{
 		"project.create":       "Create project",
@@ -1271,6 +1255,17 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 			return err
 		}
 	}
+	roleDescs := map[string]string{
+		"owner":    "Project owner",
+		"pm":       "Project manager",
+		"po":       "Product owner",
+		"dev":      "Developer",
+		"reviewer": "Reviewer",
+		"qa":       "Quality assurance",
+		"security": "Security",
+		"release":  "Release manager",
+		"observer": "Read-only observer",
+	}
 	readPerms := []string{
 		"project.list",
 		"project.read",
@@ -1295,8 +1290,24 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"release":  append(append([]string{}, readPerms...), "iteration.set_status", "attestation.add", "force.use"),
 		"observer": append([]string{}, readPerms...),
 	}
+	if cfg != nil && len(cfg.RBAC.Roles) > 0 {
+		roleDescs = map[string]string{}
+		rolePerms = map[string][]string{}
+		for roleID, role := range cfg.RBAC.Roles {
+			roleDescs[roleID] = role.Description
+			rolePerms[roleID] = append([]string{}, role.Permissions...)
+		}
+	}
+	for role, desc := range roleDescs {
+		if err := e.Repo.InsertRole(ctx, tx, role, desc); err != nil {
+			return err
+		}
+	}
 	for role, perms := range rolePerms {
 		for _, p := range perms {
+			if _, ok := permDescs[p]; !ok {
+				return fmt.Errorf("unknown permission %s for role %s", p, role)
+			}
 			if err := e.Repo.AddRolePermission(ctx, tx, role, p); err != nil {
 				return err
 			}
@@ -1315,6 +1326,16 @@ func (e Engine) seedRBAC(ctx context.Context, tx *sql.Tx, projectID, actorID str
 		"security.ok":        {"security", "owner"},
 		"iteration.approved": {"release", "owner"},
 		"init.check":         {"owner"},
+	}
+	if cfg != nil && len(cfg.RBAC.AttestationAuthorities) > 0 {
+		authorities = cfg.RBAC.AttestationAuthorities
+	}
+	for kind, roles := range authorities {
+		for _, role := range roles {
+			if _, ok := roleDescs[role]; !ok {
+				return fmt.Errorf("attestation kind %s references unknown role %s", kind, role)
+			}
+		}
 	}
 	for kind, roles := range authorities {
 		for _, role := range roles {
