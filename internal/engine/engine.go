@@ -95,22 +95,20 @@ func (e Engine) InitProject(ctx context.Context, projectID, description, actorID
 
 // TaskCreateOptions are parameters for creating a task.
 type TaskCreateOptions struct {
-	ID                string
-	ProjectID         string
-	IterationID       string
-	ParentID          string
-	Type              string
-	Title             string
-	Description       string
-	DependsOn         []string
-	AssigneeID        string
-	WorkProofJSON     *string
-	PolicyPreset      string
-	ValidationMode    string
-	RequiredKinds     []string
-	RequiredThreshold int
-	ActorID           string
-	PolicyOverride    bool
+	ID               string
+	ProjectID        string
+	IterationID      string
+	ParentID         string
+	Type             string
+	Title            string
+	Description      string
+	DependsOn        []string
+	AssigneeID       string
+	WorkOutcomesJSON *string
+	PolicyPreset     string
+	RequiredKinds    []string
+	ActorID          string
+	PolicyOverride   bool
 }
 
 func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.Task, error) {
@@ -130,9 +128,6 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 			return domain.Task{}, errors.New("config not loaded")
 		}
 		cfg = cfgFromDB
-	}
-	if opts.ValidationMode == "threshold" && opts.RequiredThreshold == 0 {
-		return domain.Task{}, errors.New("threshold required for validation-mode=threshold")
 	}
 	_, err := e.Repo.GetProject(ctx, opts.ProjectID)
 	if err != nil {
@@ -176,17 +171,10 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 			if !ok {
 				return domain.Task{}, fmt.Errorf("policy preset %s not found", presetName)
 			}
-			opts.ValidationMode = preset.Mode
 			opts.RequiredKinds = preset.Require
 			reqJSON, err = marshalStringSlice(preset.Require)
 			if err != nil {
 				return domain.Task{}, err
-			}
-			if preset.Mode == "threshold" {
-				if preset.Threshold == nil {
-					return domain.Task{}, fmt.Errorf("preset %s missing threshold", presetName)
-				}
-				opts.RequiredThreshold = *preset.Threshold
 			}
 		}
 	}
@@ -196,12 +184,9 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 			return domain.Task{}, err
 		}
 	}
-	if opts.ValidationMode == "" {
-		opts.ValidationMode = "none"
-	}
-	if opts.WorkProofJSON != nil {
-		if err := validateJSON(*opts.WorkProofJSON); err != nil {
-			return domain.Task{}, fmt.Errorf("work-proof-json: %w", err)
+	if opts.WorkOutcomesJSON != nil {
+		if err := validateJSON(*opts.WorkOutcomesJSON); err != nil {
+			return domain.Task{}, fmt.Errorf("work-outcomes-json: %w", err)
 		}
 	}
 	t := domain.Task{
@@ -214,10 +199,8 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 		Description:              opts.Description,
 		Status:                   "planned",
 		AssigneeID:               optionalString(opts.AssigneeID),
-		WorkProofJSON:            opts.WorkProofJSON,
-		ValidationMode:           opts.ValidationMode,
+		WorkOutcomesJSON:         opts.WorkOutcomesJSON,
 		RequiredAttestationsJSON: reqJSON,
-		RequiredThreshold:        optionalInt(opts.RequiredThreshold),
 		CreatedAt:                now,
 		UpdatedAt:                now,
 	}
@@ -240,18 +223,14 @@ func (e Engine) CreateTask(ctx context.Context, opts TaskCreateOptions) (domain.
 	}
 	if manualPolicy {
 		if err := e.Events.Append(ctx, tx, "policy.override", t.ProjectID, "task", t.ID, opts.ActorID, events.EventPayload{
-			"mode":      t.ValidationMode,
-			"require":   opts.RequiredKinds,
-			"threshold": opts.RequiredThreshold,
+			"require": opts.RequiredKinds,
 		}); err != nil {
 			return domain.Task{}, err
 		}
 	} else if presetName != "" {
 		if err := e.Events.Append(ctx, tx, "task.policy.applied", t.ProjectID, "task", t.ID, opts.ActorID, events.EventPayload{
 			"preset_name": presetName,
-			"mode":        t.ValidationMode,
 			"require":     opts.RequiredKinds,
-			"threshold":   opts.RequiredThreshold,
 		}); err != nil {
 			return domain.Task{}, err
 		}
@@ -348,16 +327,12 @@ type TaskUpdateOptions struct {
 	RemoveDeps        []string
 	SetParent         *string
 	ParentProvided    bool
-	SetWorkProof      *string
-	WorkProofSet      bool
-	ClearWorkProof    bool
+	SetWorkOutcomes   *string
+	WorkOutcomesSet   bool
+	ClearWorkOutcomes bool
 	PolicyPreset      string
-	ValidationMode    string
-	ValidationModeSet bool
 	RequiredKinds     []string
 	RequiredKindsSet  bool
-	Threshold         *int
-	ThresholdSet      bool
 	ActorID           string
 	Force             bool
 	PolicyOverride    bool
@@ -408,22 +383,19 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 			t.AssigneeID = opts.Assign
 		}
 	}
-	if t.ValidationMode == "" {
-		t.ValidationMode = "none"
-	}
-	if opts.WorkProofSet {
-		if opts.ClearWorkProof {
+	if opts.WorkOutcomesSet {
+		if opts.ClearWorkOutcomes {
 			if !opts.Force {
 				if err := e.requireLeaseOrForce(ctx, tx, t.ID, opts.ActorID, opts.Force); err != nil {
 					return t, err
 				}
 			}
-			t.WorkProofJSON = nil
-		} else if opts.SetWorkProof != nil {
-			if err := validateJSON(*opts.SetWorkProof); err != nil {
-				return t, fmt.Errorf("work proof JSON: %w", err)
+			t.WorkOutcomesJSON = nil
+		} else if opts.SetWorkOutcomes != nil {
+			if err := validateJSON(*opts.SetWorkOutcomes); err != nil {
+				return t, fmt.Errorf("work outcomes JSON: %w", err)
 			}
-			t.WorkProofJSON = opts.SetWorkProof
+			t.WorkOutcomesJSON = opts.SetWorkOutcomes
 			if !opts.Force {
 				if err := e.requireLeaseOrForce(ctx, tx, t.ID, opts.ActorID, opts.Force); err != nil {
 					return t, err
@@ -436,20 +408,11 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		if !ok {
 			return t, fmt.Errorf("policy preset %s not found", opts.PolicyPreset)
 		}
-		t.ValidationMode = preset.Mode
 		reqJSON, err := marshalStringSlice(preset.Require)
 		if err != nil {
 			return t, err
 		}
 		t.RequiredAttestationsJSON = reqJSON
-		t.RequiredThreshold = preset.Threshold
-	}
-	if opts.ValidationModeSet {
-		if opts.ValidationMode == "" {
-			t.ValidationMode = "none"
-		} else {
-			t.ValidationMode = opts.ValidationMode
-		}
 	}
 	if opts.RequiredKindsSet || opts.PolicyOverride {
 		reqJSON, err := marshalStringSlice(opts.RequiredKinds)
@@ -457,12 +420,6 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 			return t, err
 		}
 		t.RequiredAttestationsJSON = reqJSON
-		if !opts.ValidationModeSet && t.ValidationMode == "" {
-			t.ValidationMode = "none"
-		}
-	}
-	if opts.ThresholdSet {
-		t.RequiredThreshold = opts.Threshold
 	}
 	if opts.Status != "" && opts.Status != t.Status {
 		if opts.Status == "done" {
@@ -515,27 +472,19 @@ func (e Engine) UpdateTask(ctx context.Context, opts TaskUpdateOptions) (domain.
 		return t, err
 	}
 	newPolicy := currentPolicy(t)
-	overrideEvent := opts.PolicyOverride || ((opts.ValidationModeSet || opts.RequiredKindsSet || opts.ThresholdSet) && opts.PolicyPreset == "")
+	overrideEvent := opts.PolicyOverride || (opts.RequiredKindsSet && opts.PolicyPreset == "")
 	if opts.PolicyPreset != "" {
 		if err := e.Events.Append(ctx, tx, "task.policy.updated", t.ProjectID, "task", t.ID, opts.ActorID, events.EventPayload{
-			"preset_name":   opts.PolicyPreset,
-			"old_mode":      oldPolicy.Mode,
-			"old_require":   oldPolicy.Require,
-			"old_threshold": oldPolicy.Threshold,
-			"new_mode":      newPolicy.Mode,
-			"new_require":   newPolicy.Require,
-			"new_threshold": newPolicy.Threshold,
+			"preset_name": opts.PolicyPreset,
+			"old_require": oldPolicy.Require,
+			"new_require": newPolicy.Require,
 		}); err != nil {
 			return t, err
 		}
 	} else if overrideEvent {
 		if err := e.Events.Append(ctx, tx, "policy.override", t.ProjectID, "task", t.ID, opts.ActorID, events.EventPayload{
-			"old_mode":      oldPolicy.Mode,
-			"old_require":   oldPolicy.Require,
-			"old_threshold": oldPolicy.Threshold,
-			"new_mode":      newPolicy.Mode,
-			"new_require":   newPolicy.Require,
-			"new_threshold": newPolicy.Threshold,
+			"old_require": oldPolicy.Require,
+			"new_require": newPolicy.Require,
 		}); err != nil {
 			return t, err
 		}
@@ -608,13 +557,13 @@ func (e Engine) requireLeaseOrForce(ctx context.Context, tx *sql.Tx, taskID, act
 	return nil
 }
 
-// TaskDone sets work proof then tries to complete.
-func (e Engine) TaskDone(ctx context.Context, taskID, workProofJSON, actorID string, force bool) (domain.Task, error) {
+// TaskDone sets work outcomes then tries to complete.
+func (e Engine) TaskDone(ctx context.Context, taskID, workOutcomesJSON, actorID string, force bool) (domain.Task, error) {
 	if e.Config == nil {
 		return domain.Task{}, errors.New("config not loaded")
 	}
-	if err := validateJSON(workProofJSON); err != nil {
-		return domain.Task{}, fmt.Errorf("work-proof-json: %w", err)
+	if err := validateJSON(workOutcomesJSON); err != nil {
+		return domain.Task{}, fmt.Errorf("work-outcomes-json: %w", err)
 	}
 	t, err := e.Repo.GetTask(ctx, taskID)
 	if err != nil {
@@ -622,9 +571,6 @@ func (e Engine) TaskDone(ctx context.Context, taskID, workProofJSON, actorID str
 	}
 	if t.Status == "" {
 		t.Status = "planned"
-	}
-	if t.ValidationMode == "" {
-		t.ValidationMode = "none"
 	}
 	tx, err := e.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -640,7 +586,7 @@ func (e Engine) TaskDone(ctx context.Context, taskID, workProofJSON, actorID str
 		}
 	}
 
-	t.WorkProofJSON = &workProofJSON
+	t.WorkOutcomesJSON = &workOutcomesJSON
 	targetStatus := "done"
 	if !force {
 		// gating checks
@@ -730,7 +676,7 @@ func (e Engine) ensureSubtasksDone(ctx context.Context, tx *sql.Tx, taskID strin
 }
 
 func (e Engine) isTaskValidationSatisfied(ctx context.Context, tx *sql.Tx, t domain.Task, actorID string) (bool, error) {
-	if t.ValidationMode == "none" || t.RequiredAttestationsJSON == nil {
+	if t.RequiredAttestationsJSON == nil {
 		return true, nil
 	}
 	var required []string
@@ -757,30 +703,12 @@ func (e Engine) isTaskValidationSatisfied(ctx context.Context, tx *sql.Tx, t dom
 			}
 		}
 	}
-	switch t.ValidationMode {
-	case "all":
-		for _, req := range required {
-			if !found[req] {
-				return false, nil
-			}
+	for _, req := range required {
+		if !found[req] {
+			return false, nil
 		}
-		return true, nil
-	case "any":
-		return len(found) > 0, nil
-	case "threshold":
-		if t.RequiredThreshold == nil {
-			return false, errors.New("threshold not set")
-		}
-		count := 0
-		for _, req := range required {
-			if found[req] {
-				count++
-			}
-		}
-		return count >= *t.RequiredThreshold, nil
-	default:
-		return true, nil
 	}
+	return true, nil
 }
 
 // ClaimLease obtains a lease transactionally.
@@ -1194,9 +1122,7 @@ func optionalInt(v int) *int {
 }
 
 type policySnapshot struct {
-	Mode      string
-	Require   []string
-	Threshold *int
+	Require []string
 }
 
 func currentPolicy(t domain.Task) policySnapshot {
@@ -1205,9 +1131,7 @@ func currentPolicy(t domain.Task) policySnapshot {
 		_ = json.Unmarshal([]byte(*t.RequiredAttestationsJSON), &req)
 	}
 	return policySnapshot{
-		Mode:      t.ValidationMode,
-		Require:   req,
-		Threshold: t.RequiredThreshold,
+		Require: req,
 	}
 }
 

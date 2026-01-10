@@ -34,7 +34,7 @@ Core concepts (kid-friendly):
 - Why it matters: attestations are proof stickers and policies are the rules; together they stop "done" from being just a checkbox and keep quality consistent without nagging.
 - Workspace: your .workline toy box with only the database; configs are stored in the DB and imported explicitly.
 - Project: the one big game inside that box that owns all tasks, iterations, and evidence.
-- Policies: presets say what proof a task needs (none/all/any/threshold of attestation kinds); task types map to presets by default.
+- Policies: presets say what proof a task needs (required attestation kinds); task types map to presets by default.
 - Definition of Ready (DoR): proof stickers that say a task is ready to start (requirements accepted, design reviewed, scope groomed).
 - Definition of Done (DoD): proof stickers that say a task is truly done (tests passed, review approved, acceptance checked); enforced by presets per task type.
 - Tasks: work items with parents/deps/leases; statuses go planned -> in_progress -> review -> done (rejected/canceled are exits).
@@ -110,8 +110,8 @@ func projectListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
-				items, err := e.Repo.ListProjects(ctx)
+			return withRepo(cmd.Context(), func(ctx context.Context, r repo.Repo) error {
+				items, err := r.ListProjects(ctx)
 				if err != nil {
 					return err
 				}
@@ -387,7 +387,7 @@ func taskCreateCmd() *cobra.Command {
 			opts.RequiredKinds = requires
 			opts.DependsOn = dependsOn
 			opts.PolicyPreset = policy
-			if cmd.Flags().Changed("validation-mode") || cmd.Flags().Changed("require") || cmd.Flags().Changed("threshold") {
+			if cmd.Flags().Changed("require") {
 				opts.PolicyOverride = true
 			}
 			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
@@ -412,9 +412,7 @@ func taskCreateCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&dependsOn, "depends-on", []string{}, "dependency task id (repeatable)")
 	cmd.Flags().StringVar(&opts.AssigneeID, "assignee-id", "", "assignee id")
 	cmd.Flags().StringVar(&opts.PolicyPreset, "policy", "", "policy preset to apply (defaults use config mapping by task type)")
-	cmd.Flags().StringVar(&opts.ValidationMode, "validation-mode", "", "validation mode (overrides config and emits policy.override event)")
 	cmd.Flags().StringArrayVar(&requires, "require", []string{}, "required attestation kind (repeatable)")
-	cmd.Flags().IntVar(&opts.RequiredThreshold, "threshold", 0, "required threshold for validation-mode=threshold")
 	_ = cmd.MarkFlagRequired("title")
 	return cmd
 }
@@ -486,9 +484,8 @@ func taskUpdateCmd() *cobra.Command {
 	var opts engine.TaskUpdateOptions
 	var addDeps, removeDeps, requires []string
 	var setParent string
-	var workProof string
+	var workOutcomes string
 	var assign string
-	var threshold int
 	var setPolicy string
 	cmd := &cobra.Command{
 		Use:   "update <id>",
@@ -501,22 +498,17 @@ func taskUpdateCmd() *cobra.Command {
 			opts.RemoveDeps = removeDeps
 			opts.RequiredKinds = requires
 			opts.SetParent = optionalString(setParent)
-			opts.SetWorkProof = optionalString(workProof)
+			opts.SetWorkOutcomes = optionalString(workOutcomes)
 			opts.Assign = optionalString(assign)
 			opts.PolicyPreset = setPolicy
 			opts.AssignProvided = cmd.Flags().Changed("assign")
 			opts.ParentProvided = cmd.Flags().Changed("set-parent")
-			opts.WorkProofSet = cmd.Flags().Changed("set-work-proof-json")
-			opts.ValidationModeSet = cmd.Flags().Changed("validation-mode")
+			opts.WorkOutcomesSet = cmd.Flags().Changed("set-work-outcomes-json")
 			opts.RequiredKindsSet = cmd.Flags().Changed("require")
-			if opts.WorkProofSet && opts.SetWorkProof == nil {
-				opts.ClearWorkProof = true
+			if opts.WorkOutcomesSet && opts.SetWorkOutcomes == nil {
+				opts.ClearWorkOutcomes = true
 			}
-			if cmd.Flags().Changed("threshold") {
-				opts.Threshold = &threshold
-				opts.ThresholdSet = true
-			}
-			if cmd.Flags().Changed("validation-mode") || cmd.Flags().Changed("require") || cmd.Flags().Changed("threshold") {
+			if cmd.Flags().Changed("require") {
 				opts.PolicyOverride = true
 			}
 			opts.Force = viper.GetBool("force")
@@ -534,27 +526,25 @@ func taskUpdateCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&addDeps, "add-depends-on", []string{}, "add dependency")
 	cmd.Flags().StringArrayVar(&removeDeps, "remove-depends-on", []string{}, "remove dependency")
 	cmd.Flags().StringVar(&setParent, "set-parent", "", "set parent task id (empty for none)")
-	cmd.Flags().StringVar(&workProof, "set-work-proof-json", "", "set work proof JSON")
+	cmd.Flags().StringVar(&workOutcomes, "set-work-outcomes-json", "", "set work outcomes JSON")
 	cmd.Flags().StringVar(&opts.PolicyPreset, "set-policy", "", "apply policy preset to task")
-	cmd.Flags().StringVar(&opts.ValidationMode, "validation-mode", "", "validation mode (overrides config and emits policy.override event)")
 	cmd.Flags().StringArrayVar(&requires, "require", []string{}, "required attestation kind")
-	cmd.Flags().IntVar(&threshold, "threshold", 0, "required threshold")
 	return cmd
 }
 
 func taskDoneCmd() *cobra.Command {
-	var workProof string
+	var workOutcomes string
 	cmd := &cobra.Command{
 		Use:   "done <id>",
 		Short: "Complete task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if workProof == "" {
-				return fmt.Errorf("--work-proof-json required")
+			if workOutcomes == "" {
+				return fmt.Errorf("--work-outcomes-json required")
 			}
 			id := args[0]
 			return withEngine(cmd.Context(), func(ctx context.Context, e engine.Engine) error {
-				t, err := e.TaskDone(ctx, id, workProof, viper.GetString("actor-id"), viper.GetBool("force"))
+				t, err := e.TaskDone(ctx, id, workOutcomes, viper.GetString("actor-id"), viper.GetBool("force"))
 				if err != nil {
 					return err
 				}
@@ -562,7 +552,7 @@ func taskDoneCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&workProof, "work-proof-json", "", "work proof JSON")
+	cmd.Flags().StringVar(&workOutcomes, "work-outcomes-json", "", "work outcomes JSON")
 	return cmd
 }
 
@@ -910,6 +900,7 @@ func rbacCmd() *cobra.Command {
 	cmd.AddCommand(rbacRevokeCmd())
 	cmd.AddCommand(rbacAllowAttCmd())
 	cmd.AddCommand(rbacDenyAttCmd())
+	cmd.AddCommand(rbacBootstrapCmd())
 	return cmd
 }
 
@@ -1006,6 +997,67 @@ func rbacDenyAttCmd() *cobra.Command {
 	return cmd
 }
 
+func rbacBootstrapCmd() *cobra.Command {
+	var target, role string
+	cmd := &cobra.Command{
+		Use:   "bootstrap",
+		Short: "Bootstrap an actor role without RBAC checks (dev only)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if target == "" || role == "" {
+				return fmt.Errorf("--actor and --role required")
+			}
+			projectID := strings.TrimSpace(viper.GetString("project"))
+			if projectID == "" {
+				return fmt.Errorf("project not specified; use --project or set WORKLINE_DEFAULT_PROJECT (wl project use <id>)")
+			}
+			return withRepo(cmd.Context(), func(ctx context.Context, r repo.Repo) error {
+				if _, err := r.GetProject(ctx, projectID); err != nil {
+					return err
+				}
+				cfg, cfgErr := r.GetProjectConfig(ctx, projectID)
+				tx, err := r.DB.BeginTx(ctx, nil)
+				if err != nil {
+					return err
+				}
+				defer tx.Rollback()
+				if cfgErr == nil && cfg != nil {
+					if roleDef, ok := cfg.RBAC.Roles[role]; ok {
+						if err := r.InsertRole(ctx, tx, role, roleDef.Description); err != nil {
+							return err
+						}
+						for _, perm := range roleDef.Permissions {
+							if err := r.InsertPermission(ctx, tx, perm, ""); err != nil {
+								return err
+							}
+							if err := r.AddRolePermission(ctx, tx, role, perm); err != nil {
+								return err
+							}
+						}
+					} else {
+						if err := r.InsertRole(ctx, tx, role, ""); err != nil {
+							return err
+						}
+					}
+				} else {
+					if err := r.InsertRole(ctx, tx, role, ""); err != nil {
+						return err
+					}
+				}
+				if err := r.EnsureActor(ctx, tx, target, time.Now().UTC().Format(time.RFC3339)); err != nil {
+					return err
+				}
+				if err := r.AssignRole(ctx, tx, projectID, target, role); err != nil {
+					return err
+				}
+				return tx.Commit()
+			})
+		},
+	}
+	cmd.Flags().StringVar(&target, "actor", "", "actor id")
+	cmd.Flags().StringVar(&role, "role", "", "role id")
+	return cmd
+}
+
 func serveCmd() *cobra.Command {
 	var addr, basePath string
 	cmd := &cobra.Command{
@@ -1099,6 +1151,20 @@ func withEngine(ctx context.Context, fn func(context.Context, engine.Engine) err
 	}
 	e := engine.New(conn, cfg)
 	return fn(ctx, e)
+}
+
+func withRepo(ctx context.Context, fn func(context.Context, repo.Repo) error) error {
+	workspace := viper.GetString("workspace")
+	conn, err := db.Open(db.Config{Workspace: workspace})
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := migrate.Migrate(conn); err != nil {
+		return err
+	}
+	r := repo.Repo{DB: conn}
+	return fn(ctx, r)
 }
 
 func printJSONOrTable(v any) error {

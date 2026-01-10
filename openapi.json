@@ -161,13 +161,13 @@
             "readOnly": true,
             "type": "string"
           },
-          "work_proof": {
+          "work_outcomes": {
             "additionalProperties": {},
             "type": "object"
           }
         },
         "required": [
-          "work_proof"
+          "work_outcomes"
         ],
         "type": "object"
       },
@@ -427,7 +427,8 @@
               "feature",
               "bug",
               "docs",
-              "chore"
+              "chore",
+              "workshop"
             ],
             "examples": [
               "feature"
@@ -437,7 +438,7 @@
           "validation": {
             "$ref": "#/components/schemas/TaskValidationRequest"
           },
-          "work_proof": {
+          "work_outcomes": {
             "additionalProperties": {},
             "examples": [
               {
@@ -802,28 +803,14 @@
       "PolicyPresetResponse": {
         "additionalProperties": false,
         "properties": {
-          "mode": {
-            "enum": [
-              "none",
-              "all",
-              "any",
-              "threshold"
-            ],
-            "type": "string"
-          },
           "require": {
             "items": {
               "type": "string"
             },
             "type": "array"
-          },
-          "threshold": {
-            "format": "int64",
-            "type": "integer"
           }
         },
         "required": [
-          "mode",
           "require"
         ],
         "type": "object"
@@ -1061,13 +1048,6 @@
             },
             "type": "array"
           },
-          "required_threshold": {
-            "examples": [
-              2
-            ],
-            "format": "int64",
-            "type": "integer"
-          },
           "status": {
             "enum": [
               "planned",
@@ -1094,7 +1074,8 @@
               "feature",
               "bug",
               "docs",
-              "chore"
+              "chore",
+              "workshop"
             ],
             "examples": [
               "feature"
@@ -1108,19 +1089,7 @@
             "format": "date-time",
             "type": "string"
           },
-          "validation_mode": {
-            "enum": [
-              "none",
-              "all",
-              "any",
-              "threshold"
-            ],
-            "examples": [
-              "all"
-            ],
-            "type": "string"
-          },
-          "work_proof": {
+          "work_outcomes": {
             "additionalProperties": {},
             "examples": [
               {
@@ -1136,7 +1105,6 @@
           "type",
           "title",
           "status",
-          "validation_mode",
           "required_attestations",
           "depends_on",
           "created_at",
@@ -1148,18 +1116,6 @@
       "TaskValidationRequest": {
         "additionalProperties": false,
         "properties": {
-          "mode": {
-            "enum": [
-              "none",
-              "all",
-              "any",
-              "threshold"
-            ],
-            "examples": [
-              "all"
-            ],
-            "type": "string"
-          },
           "require": {
             "examples": [
               [
@@ -1171,13 +1127,6 @@
               "type": "string"
             },
             "type": "array"
-          },
-          "threshold": {
-            "examples": [
-              2
-            ],
-            "format": "int64",
-            "type": "integer"
           }
         },
         "type": "object"
@@ -1266,7 +1215,7 @@
           "validation": {
             "$ref": "#/components/schemas/UpdateTaskValidationRequest"
           },
-          "work_proof": {
+          "work_outcomes": {
             "additionalProperties": {},
             "type": "object"
           }
@@ -1276,24 +1225,11 @@
       "UpdateTaskValidationRequest": {
         "additionalProperties": false,
         "properties": {
-          "mode": {
-            "enum": [
-              "none",
-              "all",
-              "any",
-              "threshold"
-            ],
-            "type": "string"
-          },
           "require": {
             "items": {
               "type": "string"
             },
             "type": "array"
-          },
-          "threshold": {
-            "format": "int64",
-            "type": "integer"
           }
         },
         "type": "object"
@@ -1320,18 +1256,6 @@
               "type": "string"
             },
             "type": "array"
-          },
-          "mode": {
-            "enum": [
-              "none",
-              "all",
-              "any",
-              "threshold"
-            ],
-            "examples": [
-              "all"
-            ],
-            "type": "string"
           },
           "present": {
             "examples": [
@@ -1361,17 +1285,9 @@
               false
             ],
             "type": "boolean"
-          },
-          "threshold": {
-            "examples": [
-              2
-            ],
-            "format": "int64",
-            "type": "integer"
           }
         },
         "required": [
-          "mode",
           "required",
           "present",
           "missing",
@@ -1437,18 +1353,84 @@
           "permissions"
         ],
         "type": "object"
+      },
+      "WorkOutcomesAppendRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {
+            "description": "Any JSON value"
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ],
+        "type": "object"
+      },
+      "WorkOutcomesMergeRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ],
+        "type": "object"
+      },
+      "WorkOutcomesPutRequest": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {
+            "description": "Any JSON value"
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ],
+        "type": "object"
+      },
+      "WorkOutcomesUpdateResponse": {
+        "properties": {
+          "length": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "work_outcomes": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "required": [
+          "path",
+          "work_outcomes"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT"
-      },
       "apiKeyAuth": {
-        "type": "apiKey",
         "in": "header",
-        "name": "X-Api-Key"
+        "name": "X-Api-Key",
+        "type": "apiKey"
+      },
+      "bearerAuth": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
       }
     }
   },
@@ -1486,8 +1468,8 @@
             "description": "Error"
           }
         },
-        "summary": "Health check",
-        "security": []
+        "security": [],
+        "summary": "Health check"
       }
     },
     "/v0/projects": {
@@ -1538,7 +1520,6 @@
             "description": "Error"
           }
         },
-        "summary": "List projects",
         "security": [
           {
             "bearerAuth": []
@@ -1546,7 +1527,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "List projects"
       },
       "post": {
         "operationId": "create-project",
@@ -1642,7 +1624,6 @@
             "description": "Error"
           }
         },
-        "summary": "Create project",
         "security": [
           {
             "bearerAuth": []
@@ -1650,7 +1631,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Create project"
       }
     },
     "/v0/projects/{project_id}": {
@@ -1731,7 +1713,6 @@
             "description": "Error"
           }
         },
-        "summary": "Delete project",
         "security": [
           {
             "bearerAuth": []
@@ -1739,7 +1720,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Delete project"
       },
       "get": {
         "operationId": "get-project",
@@ -1805,7 +1787,6 @@
             "description": "Error"
           }
         },
-        "summary": "Get project",
         "security": [
           {
             "bearerAuth": []
@@ -1813,7 +1794,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Get project"
       },
       "patch": {
         "operationId": "update-project",
@@ -1919,7 +1901,6 @@
             "description": "Error"
           }
         },
-        "summary": "Update project",
         "security": [
           {
             "bearerAuth": []
@@ -1927,7 +1908,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Update project"
       }
     },
     "/v0/projects/{project_id}/attestations": {
@@ -2043,7 +2025,6 @@
             "description": "Error"
           }
         },
-        "summary": "List attestations",
         "security": [
           {
             "bearerAuth": []
@@ -2051,7 +2032,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "List attestations"
       },
       "post": {
         "operationId": "add-attestation",
@@ -2157,7 +2139,6 @@
             "description": "Error"
           }
         },
-        "summary": "Add attestation",
         "security": [
           {
             "bearerAuth": []
@@ -2165,7 +2146,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Add attestation"
       }
     },
     "/v0/projects/{project_id}/config": {
@@ -2233,7 +2215,6 @@
             "description": "Error"
           }
         },
-        "summary": "Get project config",
         "security": [
           {
             "bearerAuth": []
@@ -2241,7 +2222,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Get project config"
       }
     },
     "/v0/projects/{project_id}/decisions": {
@@ -2349,7 +2331,6 @@
             "description": "Error"
           }
         },
-        "summary": "Create decision",
         "security": [
           {
             "bearerAuth": []
@@ -2357,7 +2338,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Create decision"
       }
     },
     "/v0/projects/{project_id}/events": {
@@ -2474,7 +2456,6 @@
             "description": "Error"
           }
         },
-        "summary": "List recent events",
         "security": [
           {
             "bearerAuth": []
@@ -2482,7 +2463,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "List recent events"
       }
     },
     "/v0/projects/{project_id}/iterations": {
@@ -2568,7 +2550,6 @@
             "description": "Error"
           }
         },
-        "summary": "List iterations",
         "security": [
           {
             "bearerAuth": []
@@ -2576,7 +2557,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "List iterations"
       },
       "post": {
         "operationId": "create-iteration",
@@ -2682,7 +2664,6 @@
             "description": "Error"
           }
         },
-        "summary": "Create iteration",
         "security": [
           {
             "bearerAuth": []
@@ -2690,7 +2671,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Create iteration"
       }
     },
     "/v0/projects/{project_id}/iterations/{id}/status": {
@@ -2814,7 +2796,6 @@
             "description": "Error"
           }
         },
-        "summary": "Update iteration status",
         "security": [
           {
             "bearerAuth": []
@@ -2822,7 +2803,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Update iteration status"
       }
     },
     "/v0/projects/{project_id}/me/permissions": {
@@ -2900,7 +2882,6 @@
             "description": "Error"
           }
         },
-        "summary": "Current actor permissions",
         "security": [
           {
             "bearerAuth": []
@@ -2908,7 +2889,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Current actor permissions"
       }
     },
     "/v0/projects/{project_id}/rbac/attestations/allow": {
@@ -3009,7 +2991,6 @@
             "description": "Error"
           }
         },
-        "summary": "Allow attestation role",
         "security": [
           {
             "bearerAuth": []
@@ -3017,7 +2998,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Allow attestation role"
       }
     },
     "/v0/projects/{project_id}/rbac/attestations/deny": {
@@ -3118,7 +3100,6 @@
             "description": "Error"
           }
         },
-        "summary": "Deny attestation role",
         "security": [
           {
             "bearerAuth": []
@@ -3126,7 +3107,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Deny attestation role"
       }
     },
     "/v0/projects/{project_id}/rbac/roles/grant": {
@@ -3227,7 +3209,6 @@
             "description": "Error"
           }
         },
-        "summary": "Grant role",
         "security": [
           {
             "bearerAuth": []
@@ -3235,7 +3216,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Grant role"
       }
     },
     "/v0/projects/{project_id}/rbac/roles/revoke": {
@@ -3336,7 +3318,6 @@
             "description": "Error"
           }
         },
-        "summary": "Revoke role",
         "security": [
           {
             "bearerAuth": []
@@ -3344,7 +3325,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Revoke role"
       }
     },
     "/v0/projects/{project_id}/status": {
@@ -3383,7 +3365,6 @@
             "description": "Error"
           }
         },
-        "summary": "Project status",
         "security": [
           {
             "bearerAuth": []
@@ -3391,7 +3372,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Project status"
       }
     },
     "/v0/projects/{project_id}/tasks": {
@@ -3509,7 +3491,6 @@
             "description": "Error"
           }
         },
-        "summary": "List tasks",
         "security": [
           {
             "bearerAuth": []
@@ -3517,7 +3498,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "List tasks"
       },
       "post": {
         "operationId": "create-task",
@@ -3623,7 +3605,6 @@
             "description": "Error"
           }
         },
-        "summary": "Create task",
         "security": [
           {
             "bearerAuth": []
@@ -3631,7 +3612,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Create task"
       }
     },
     "/v0/projects/{project_id}/tasks/tree": {
@@ -3718,7 +3700,6 @@
             "description": "Error"
           }
         },
-        "summary": "Task tree",
         "security": [
           {
             "bearerAuth": []
@@ -3726,7 +3707,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Task tree"
       }
     },
     "/v0/projects/{project_id}/tasks/{id}": {
@@ -3802,7 +3784,6 @@
             "description": "Error"
           }
         },
-        "summary": "Get task",
         "security": [
           {
             "bearerAuth": []
@@ -3810,7 +3791,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Get task"
       },
       "patch": {
         "operationId": "update-task",
@@ -3932,7 +3914,6 @@
             "description": "Error"
           }
         },
-        "summary": "Update task",
         "security": [
           {
             "bearerAuth": []
@@ -3940,7 +3921,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Update task"
       }
     },
     "/v0/projects/{project_id}/tasks/{id}/claim": {
@@ -4056,7 +4038,6 @@
             "description": "Error"
           }
         },
-        "summary": "Claim task lease",
         "security": [
           {
             "bearerAuth": []
@@ -4064,7 +4045,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Claim task lease"
       }
     },
     "/v0/projects/{project_id}/tasks/{id}/done": {
@@ -4188,7 +4170,6 @@
             "description": "Error"
           }
         },
-        "summary": "Complete task",
         "security": [
           {
             "bearerAuth": []
@@ -4196,7 +4177,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Complete task"
       }
     },
     "/v0/projects/{project_id}/tasks/{id}/release": {
@@ -4285,7 +4267,6 @@
             "description": "Error"
           }
         },
-        "summary": "Release task lease",
         "security": [
           {
             "bearerAuth": []
@@ -4293,7 +4274,8 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Release task lease"
       }
     },
     "/v0/projects/{project_id}/tasks/{id}/validation": {
@@ -4379,7 +4361,6 @@
             "description": "Error"
           }
         },
-        "summary": "Task validation status",
         "security": [
           {
             "bearerAuth": []
@@ -4387,7 +4368,350 @@
           {
             "apiKeyAuth": []
           }
-        ]
+        ],
+        "summary": "Task validation status"
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}/work-outcomes/append": {
+      "post": {
+        "operationId": "append-task-work-outcomes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkOutcomesAppendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkOutcomesUpdateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Append work outcomes entry"
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}/work-outcomes/merge": {
+      "post": {
+        "operationId": "merge-task-work-outcomes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkOutcomesMergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkOutcomesUpdateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Merge a work outcomes object"
+      }
+    },
+    "/v0/projects/{project_id}/tasks/{id}/work-outcomes/put": {
+      "post": {
+        "operationId": "put-task-work-outcomes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkOutcomesPutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkOutcomesUpdateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Set a work outcomes value"
       }
     }
   },

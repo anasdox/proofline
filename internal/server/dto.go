@@ -15,9 +15,7 @@ type CreateProjectRequest struct {
 }
 
 type TaskValidationRequest struct {
-	Mode      string   `json:"mode,omitempty" enum:"none,all,any,threshold" example:"all"`
-	Require   []string `json:"require,omitempty" example:"[\"ci.passed\",\"review.approved\"]"`
-	Threshold *int     `json:"threshold,omitempty" example:"2"`
+	Require []string `json:"require,omitempty" example:"[\"ci.passed\",\"review.approved\"]"`
 }
 
 type TaskPolicyRequest struct {
@@ -25,23 +23,21 @@ type TaskPolicyRequest struct {
 }
 
 type CreateTaskRequest struct {
-	ID          *string                `json:"id,omitempty" example:"task-auth-1"`
-	IterationID *string                `json:"iteration_id,omitempty" example:"iter-1"`
-	ParentID    *string                `json:"parent_id,omitempty" example:"task-epic"`
-	Type        string                 `json:"type" enum:"technical,feature,bug,docs,chore" example:"feature"`
-	Title       string                 `json:"title" example:"Ship authentication"`
-	Description *string                `json:"description,omitempty" example:"Implement login and SSO flows"`
-	AssigneeID  *string                `json:"assignee_id,omitempty" example:"dev-1"`
-	DependsOn   []string               `json:"depends_on,omitempty" example:"[\"task-seed\"]"`
-	Policy      *TaskPolicyRequest     `json:"policy,omitempty"`
-	Validation  *TaskValidationRequest `json:"validation,omitempty"`
-	WorkProof   map[string]any         `json:"work_proof,omitempty" example:"{\"pr\":123}"`
+	ID           *string                `json:"id,omitempty" example:"task-auth-1"`
+	IterationID  *string                `json:"iteration_id,omitempty" example:"iter-1"`
+	ParentID     *string                `json:"parent_id,omitempty" example:"task-epic"`
+	Type         string                 `json:"type" enum:"technical,feature,bug,docs,chore,workshop" example:"feature"`
+	Title        string                 `json:"title" example:"Ship authentication"`
+	Description  *string                `json:"description,omitempty" example:"Implement login and SSO flows"`
+	AssigneeID   *string                `json:"assignee_id,omitempty" example:"dev-1"`
+	DependsOn    []string               `json:"depends_on,omitempty" example:"[\"task-seed\"]"`
+	Policy       *TaskPolicyRequest     `json:"policy,omitempty"`
+	Validation   *TaskValidationRequest `json:"validation,omitempty"`
+	WorkOutcomes map[string]any         `json:"work_outcomes,omitempty" example:"{\"pr\":123}"`
 }
 
 type UpdateTaskValidationRequest struct {
-	Mode      *string  `json:"mode,omitempty" enum:"none,all,any,threshold"`
-	Require   []string `json:"require,omitempty"`
-	Threshold *int     `json:"threshold,omitempty"`
+	Require []string `json:"require,omitempty"`
 }
 
 type UpdateTaskRequest struct {
@@ -50,12 +46,27 @@ type UpdateTaskRequest struct {
 	AddDependsOn    []string                     `json:"add_depends_on,omitempty"`
 	RemoveDependsOn []string                     `json:"remove_depends_on,omitempty"`
 	ParentID        *string                      `json:"parent_id,omitempty"`
-	WorkProof       *map[string]any              `json:"work_proof,omitempty"`
+	WorkOutcomes    *map[string]any              `json:"work_outcomes,omitempty"`
 	Validation      *UpdateTaskValidationRequest `json:"validation,omitempty"`
 }
 
 type CompleteTaskRequest struct {
-	WorkProof map[string]any `json:"work_proof"`
+	WorkOutcomes map[string]any `json:"work_outcomes"`
+}
+
+type WorkOutcomesAppendRequest struct {
+	Path  string `json:"path"`
+	Value any    `json:"value"`
+}
+
+type WorkOutcomesPutRequest struct {
+	Path  string `json:"path"`
+	Value any    `json:"value"`
+}
+
+type WorkOutcomesMergeRequest struct {
+	Path  string         `json:"path"`
+	Value map[string]any `json:"value"`
 }
 
 type CreateIterationRequest struct {
@@ -112,15 +123,13 @@ type TaskResponse struct {
 	ProjectID            string         `json:"project_id" example:"workline"`
 	IterationID          *string        `json:"iteration_id,omitempty" example:"iter-1"`
 	ParentID             *string        `json:"parent_id,omitempty" example:"task-epic"`
-	Type                 string         `json:"type" enum:"technical,feature,bug,docs,chore" example:"feature"`
+	Type                 string         `json:"type" enum:"technical,feature,bug,docs,chore,workshop" example:"feature"`
 	Title                string         `json:"title" example:"Ship authentication"`
 	Description          string         `json:"description,omitempty" example:"Implement login and SSO flows"`
 	Status               string         `json:"status" enum:"planned,in_progress,review,done,rejected,canceled" example:"planned"`
 	AssigneeID           *string        `json:"assignee_id,omitempty" example:"dev-1"`
-	WorkProof            map[string]any `json:"work_proof,omitempty" example:"{\"pr\":123}"`
-	ValidationMode       string         `json:"validation_mode" enum:"none,all,any,threshold" example:"all"`
+	WorkOutcomes         map[string]any `json:"work_outcomes,omitempty" example:"{\"pr\":123}"`
 	RequiredAttestations []string       `json:"required_attestations" example:"[\"ci.passed\",\"review.approved\"]"`
-	RequiredThreshold    *int           `json:"required_threshold,omitempty" example:"2"`
 	DependsOn            []string       `json:"depends_on" example:"[]"`
 	CreatedAt            string         `json:"created_at" format:"date-time" example:"2024-05-01T09:00:00Z"`
 	UpdatedAt            string         `json:"updated_at" format:"date-time" example:"2024-05-01T09:05:00Z"`
@@ -145,6 +154,12 @@ type LeaseResponse struct {
 	OwnerID    string `json:"owner_id"`
 	AcquiredAt string `json:"acquired_at" format:"date-time"`
 	ExpiresAt  string `json:"expires_at" format:"date-time"`
+}
+
+type WorkOutcomesUpdateResponse struct {
+	Path         string         `json:"path"`
+	WorkOutcomes map[string]any `json:"work_outcomes"`
+	Length       *int           `json:"length,omitempty"`
 }
 
 type AttestationResponse struct {
@@ -172,9 +187,7 @@ type EventResponse struct {
 }
 
 type ValidationStatusResponse struct {
-	Mode      string   `json:"mode" enum:"none,all,any,threshold" example:"all"`
 	Required  []string `json:"required" example:"[\"ci.passed\",\"review.approved\"]"`
-	Threshold *int     `json:"threshold,omitempty" example:"2"`
 	Present   []string `json:"present" example:"[\"ci.passed\"]"`
 	Missing   []string `json:"missing" example:"[\"review.approved\"]"`
 	Satisfied bool     `json:"satisfied" example:"false"`
@@ -210,9 +223,7 @@ type policyConfigSection struct {
 }
 
 type policyPresetResponse struct {
-	Mode      string   `json:"mode" enum:"none,all,any,threshold"`
-	Require   []string `json:"require"`
-	Threshold *int     `json:"threshold,omitempty"`
+	Require []string `json:"require"`
 }
 
 type paginatedTasks struct {
@@ -289,7 +300,7 @@ func iterationResponse(it domain.Iteration) IterationResponse {
 
 func taskResponse(t domain.Task) TaskResponse {
 	req := decodeStringSlice(t.RequiredAttestationsJSON)
-	wp := decodeJSONMap(t.WorkProofJSON)
+	workOutcomes := decodeJSONMap(t.WorkOutcomesJSON)
 	return TaskResponse{
 		ID:                   t.ID,
 		OrgID:                t.OrgID,
@@ -301,10 +312,8 @@ func taskResponse(t domain.Task) TaskResponse {
 		Description:          t.Description,
 		Status:               t.Status,
 		AssigneeID:           t.AssigneeID,
-		WorkProof:            wp,
-		ValidationMode:       defaultMode(t.ValidationMode),
+		WorkOutcomes:         workOutcomes,
 		RequiredAttestations: nonNilSlice(req),
-		RequiredThreshold:    t.RequiredThreshold,
 		DependsOn:            nonNilSlice(t.DependsOn),
 		CreatedAt:            t.CreatedAt,
 		UpdatedAt:            t.UpdatedAt,
@@ -386,9 +395,7 @@ func configResponse(cfg *config.Config) ProjectConfigResponse {
 	}
 	for name, preset := range cfg.Policies.Presets {
 		res.Policies.Presets[name] = policyPresetResponse{
-			Mode:      preset.Mode,
-			Require:   nonNilSlice(preset.Require),
-			Threshold: preset.Threshold,
+			Require: nonNilSlice(preset.Require),
 		}
 	}
 	res.Policies.Defaults.Task = cfg.Policies.Defaults.Task
@@ -428,13 +435,6 @@ func nonNilSlice[T any](in []T) []T {
 		return []T{}
 	}
 	return in
-}
-
-func defaultMode(mode string) string {
-	if mode == "" {
-		return "none"
-	}
-	return mode
 }
 
 func strPtr(in string) *string {

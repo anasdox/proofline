@@ -16,3 +16,4 @@ workline.yml
 .vscode/
 
 .env
+sdk/python/__pycache__/workline.cpython-311.pyc

@@ -164,7 +164,6 @@ func TestPolicyEvaluation(t *testing.T) {
 		ProjectID:      "proj-1",
 		Title:          "policy",
 		ActorID:        "tester",
-		ValidationMode: "all",
 		RequiredKinds:  []string{"ci.passed", "review.approved"},
 		PolicyOverride: true,
 	})

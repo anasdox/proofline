@@ -662,7 +662,7 @@ func TestTaskDoneWithAttestations(t *testing.T) {
 	_ = json.Unmarshal(taskBody, &fetched)
 
 	doneRes, doneBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+taskID+"/done?force=true", map[string]any{
-		"work_proof": map[string]any{"note": "ok"},
+		"work_outcomes": map[string]any{"note": "ok"},
 	}, nil)
 	if doneRes.StatusCode != http.StatusOK {
 		t.Fatalf("done status %d: %s", doneRes.StatusCode, string(doneBody))
@@ -1014,7 +1014,7 @@ func TestForceRequiresPermission(t *testing.T) {
 	}
 
 	doneRes, doneData := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/done?force=true", map[string]any{
-		"work_proof": map[string]any{"note": "force"},
+		"work_outcomes": map[string]any{"note": "force"},
 	}, bearerHeader(srv.bearerToken(t, "force-dev", "default-org", time.Now().Add(time.Hour))))
 	if doneRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", doneRes.StatusCode, string(doneData))
@@ -1065,7 +1065,6 @@ func TestDoneTaskRequiresValidation(t *testing.T) {
 
 	patchRes, patchBody := doJSON(t, client, http.MethodPatch, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID, map[string]any{
 		"validation": map[string]any{
-			"mode":    "all",
 			"require": []string{"ci.passed"},
 		},
 	}, nil)
@@ -1079,7 +1078,7 @@ func TestDoneTaskRequiresValidation(t *testing.T) {
 	}
 
 	doneRes, doneBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/done", map[string]any{
-		"work_proof": map[string]any{"note": "testing"},
+		"work_outcomes": map[string]any{"note": "testing"},
 	}, nil)
 	if doneRes.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d: %s", doneRes.StatusCode, string(doneBody))
@@ -1130,7 +1129,6 @@ func TestValidationEndpoint(t *testing.T) {
 
 	patchRes, patchBody := doJSON(t, client, http.MethodPatch, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID, map[string]any{
 		"validation": map[string]any{
-			"mode":    "all",
 			"require": []string{"ci.passed", "review.approved"},
 		},
 	}, nil)
@@ -1160,6 +1158,51 @@ func TestValidationEndpoint(t *testing.T) {
 	}
 	if len(status.Present) != 1 || len(status.Missing) != 1 {
 		t.Fatalf("unexpected present/missing: %+v", status)
+	}
+}
+
+func TestWorkOutcomesAppendEndpoint(t *testing.T) {
+	srv, cleanup := newTestServer(t)
+	defer cleanup()
+	projectID := "workline"
+	client := srv.Client()
+
+	createRes, data := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks", map[string]any{
+		"title": "Work outcomes append",
+		"type":  "docs",
+	}, nil)
+	if createRes.StatusCode != http.StatusCreated {
+		t.Fatalf("create task: %d %s", createRes.StatusCode, string(data))
+	}
+	var task TaskResponse
+	_ = json.Unmarshal(data, &task)
+
+	appendRes, appendBody := doJSON(t, client, http.MethodPost, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID+"/work-outcomes/append", map[string]any{
+		"path":  "actions",
+		"value": map[string]any{"note": "first"},
+	}, nil)
+	if appendRes.StatusCode != http.StatusOK {
+		t.Fatalf("append work outcomes: %d %s", appendRes.StatusCode, string(appendBody))
+	}
+	var appendResp WorkOutcomesUpdateResponse
+	if err := json.Unmarshal(appendBody, &appendResp); err != nil {
+		t.Fatalf("unmarshal append response: %v", err)
+	}
+	if appendResp.Path != "actions" || appendResp.Length == nil || *appendResp.Length != 1 {
+		t.Fatalf("unexpected append response: %+v", appendResp)
+	}
+
+	getRes, getBody := doJSON(t, client, http.MethodGet, srv.URL+"/v0/projects/"+projectID+"/tasks/"+task.ID, nil, nil)
+	if getRes.StatusCode != http.StatusOK {
+		t.Fatalf("get task: %d %s", getRes.StatusCode, string(getBody))
+	}
+	var updated TaskResponse
+	if err := json.Unmarshal(getBody, &updated); err != nil {
+		t.Fatalf("unmarshal task: %v", err)
+	}
+	actions, ok := updated.WorkOutcomes["actions"].([]any)
+	if !ok || len(actions) != 1 {
+		t.Fatalf("expected one action in work_outcomes, got %+v", updated.WorkOutcomes)
 	}
 }
 

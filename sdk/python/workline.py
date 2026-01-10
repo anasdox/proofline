@@ -131,3 +131,15 @@ class WorklineClient:
             )
             for item in items
         ]
+
+    def append_work_outcomes(self, task_id: str, path: str, value: Any) -> Dict[str, Any]:
+        url = self._project_path(f"tasks/{task_id}/work-outcomes/append")
+        return self._request("POST", url, {"path": path, "value": value})
+
+    def put_work_outcomes(self, task_id: str, path: str, value: Any) -> Dict[str, Any]:
+        url = self._project_path(f"tasks/{task_id}/work-outcomes/put")
+        return self._request("POST", url, {"path": path, "value": value})
+
+    def merge_work_outcomes(self, task_id: str, path: str, value: Dict[str, Any]) -> Dict[str, Any]:
+        url = self._project_path(f"tasks/{task_id}/work-outcomes/merge")
+        return self._request("POST", url, {"path": path, "value": value})

@@ -17,7 +17,7 @@ Core Concepts (explained simply)
 - Policy(`policies`): rules that say which attestation is needed. Think: "before dessert you must finish veggies." Example: preset `high` might require `ci.passed`, `review.approved`, and `security.ok`.
 - Definition of Ready (DoR): proof that a task is ready to start (e.g., `requirements.accepted`, `design.reviewed`, `scope.groomed`). Use the `ready` preset to gate work.
 - Definition of Done (DoD): proof that a task is really done (e.g., `ci.passed`, `review.approved`, `acceptance.passed`). Task types map to DoD presets by default.
-- Tasks: the pieces of work (feature, bug, doc). They can depend on others or have children. Status path is `planned -> in_progress -> review -> done` (with `rejected`/`canceled` side exits). Example: `wl task create --type feature --title "Login"` makes a new task; `wl task done <id> --work-proof-json '{}'` tries to finish it after checks.
+- Tasks: the pieces of work (feature, bug, docs, workshop). They can depend on others or have children. Status path is `planned -> in_progress -> review -> done` (with `rejected`/`canceled` side exits). Example: `wl task create --type feature --title "Login"` makes a new task; `wl task done <id> --work-outcomes-json '{}'` tries to finish it after checks.
 - Iterations: short adventures inside the big game. Start `pending`, go `running`, then `delivered`, and finally `validated` when the right proof is present. Example: `wl iteration set-status iter-1 --status validated` requires the configured attestation unless `--force`.
 - Leases: a temporary "I’m working on this" tag so two kids don’t do the same task. Example: `wl task claim <id>` to grab, `wl task release <id>` to drop it.
 - Event log: the diary of everything that happened. Example: `wl log tail --n 20` shows recent entries.
@@ -43,7 +43,7 @@ Configuration
 - Inspect/validate: `wl config show` and `wl config validate` (or `--json`).
 - Project selection: `--project` overrides; otherwise `WORKLINE_DEFAULT_PROJECT` is required (set via `wl project use <id>`). Config seeding happens only when the project has no stored config.
 - Optional RBAC config: define `rbac.roles` with permission lists and `rbac.attestation_authorities` to control which roles can attest to which kinds.
-- Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit validation flags (`--validation-mode`, `--require`, `--threshold`), which emit `policy.override`.
+- Default policies are applied automatically on task creation based on `policies.defaults.task.<type>` unless overridden with `--policy` or explicit required attestations (`--require`), which emit `policy.override`.
 - Iteration validation uses `policies.defaults.iteration.validation.require`; missing value means no attestation is required.
 
 Quick Start
@@ -58,7 +58,7 @@ wl task list
 wl task claim <task-id>
 wl task update <task-id> --status in_progress
 wl attest add --entity-kind task --entity-id <task-id> --kind ci.passed
-wl task done <task-id> --work-proof-json '{"notes":"implemented and tested"}'
+wl task done <task-id> --work-outcomes-json '{"notes":"implemented and tested"}'
 wl log tail
 ```
 
@@ -110,6 +110,7 @@ SDKs
 
 Agents (LangGraph / Autogen)
 ----------------------------
+- LangChain (Python) example: see `examples/langchain_workline.py`.
 - LangGraph (Python) integration sketch:
   ```python
   from langgraph.graph import StateGraph

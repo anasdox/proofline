@@ -38,21 +38,12 @@ type Config struct {
 }
 
 type PolicyPreset struct {
-	Mode      string   `yaml:"mode"`
-	Require   []string `yaml:"require"`
-	Threshold *int     `yaml:"threshold"`
+	Require []string `yaml:"require"`
 }
 
 type RBACRole struct {
 	Description string   `yaml:"description"`
 	Permissions []string `yaml:"permissions"`
-}
-
-var allowedModes = map[string]struct{}{
-	"none":      {},
-	"all":       {},
-	"any":       {},
-	"threshold": {},
 }
 
 // Load reads and validates config from workspace.
@@ -80,14 +71,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config.policies.presets is required")
 	}
 	for name, preset := range c.Policies.Presets {
-		if _, ok := allowedModes[preset.Mode]; !ok {
-			return fmt.Errorf("preset %s has invalid mode %s", name, preset.Mode)
-		}
-		if preset.Mode == "threshold" {
-			if preset.Threshold == nil {
-				return fmt.Errorf("preset %s threshold required for mode threshold", name)
-			}
-		}
 		for _, req := range preset.Require {
 			if req == "" {
 				return fmt.Errorf("preset %s has empty attestation kind", name)
@@ -227,32 +210,41 @@ attestations:
       description: "Security checks passed"
     iteration.approved:
       description: "Iteration approved"
+    workshop.discovery.completed:
+      description: "Discovery workshop completed"
+    workshop.decision.completed:
+      description: "Decision workshop completed"
+    workshop.brainstorm.completed:
+      description: "Brainstorm workshop completed"
 
 policies:
   presets:
     ready:
-      mode: all
       require: [requirements.accepted, design.reviewed, scope.groomed]
 
     done.standard:
-      mode: all
       require: [ci.passed, review.approved, acceptance.passed]
 
     done.bugfix:
-      mode: all
       require: [ci.passed, review.approved]
 
     low:
-      mode: any
       require: [ci.passed, review.approved]
 
     medium:
-      mode: all
       require: [ci.passed, review.approved]
 
     high:
-      mode: all
       require: [ci.passed, review.approved, security.ok]
+
+    workshop.discovery:
+      require: [workshop.discovery.completed]
+
+    workshop.decision:
+      require: [workshop.decision.completed]
+
+    workshop.brainstorm:
+      require: [workshop.brainstorm.completed]
 
   defaults:
     task:
@@ -261,6 +253,7 @@ policies:
       technical: done.standard
       docs: low
       chore: low
+      workshop: workshop.discovery
 
     iteration:
       validation:

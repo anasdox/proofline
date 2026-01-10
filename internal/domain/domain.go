@@ -24,15 +24,13 @@ type Task struct {
 	ProjectID                string   `json:"project_id"`
 	IterationID              *string  `json:"iteration_id,omitempty"`
 	ParentID                 *string  `json:"parent_id,omitempty"`
-	Type                     string   `json:"type" enum:"technical,feature,bug,docs,chore"`
+	Type                     string   `json:"type" enum:"technical,feature,bug,docs,chore,workshop"`
 	Title                    string   `json:"title"`
 	Description              string   `json:"description,omitempty"`
 	Status                   string   `json:"status" enum:"planned,in_progress,review,done,rejected,canceled"`
 	AssigneeID               *string  `json:"assignee_id,omitempty"`
-	WorkProofJSON            *string  `json:"work_proof_json,omitempty"`
-	ValidationMode           string   `json:"validation_mode" enum:"none,all,any,threshold"`
+	WorkOutcomesJSON         *string  `json:"work_outcomes_json,omitempty"`
 	RequiredAttestationsJSON *string  `json:"required_attestations_json,omitempty"`
-	RequiredThreshold        *int     `json:"required_threshold,omitempty"`
 	DependsOn                []string `json:"depends_on,omitempty"`
 	CreatedAt                string   `json:"created_at" format:"date-time"`
 	UpdatedAt                string   `json:"updated_at" format:"date-time"`

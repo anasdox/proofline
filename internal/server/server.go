@@ -669,23 +669,16 @@ func registerTasks(api huma.API, e engine.Engine) {
 			}
 			if input.Body.Validation != nil {
 				opts.PolicyOverride = true
-				opts.ValidationMode = input.Body.Validation.Mode
 				opts.RequiredKinds = input.Body.Validation.Require
-				if input.Body.Validation.Threshold != nil {
-					opts.RequiredThreshold = *input.Body.Validation.Threshold
-				}
-				if opts.ValidationMode == "threshold" && input.Body.Validation.Threshold == nil {
-					return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
-				}
 			}
 		}
-		if input.Body.WorkProof != nil {
-			b, err := json.Marshal(input.Body.WorkProof)
+		if input.Body.WorkOutcomes != nil {
+			b, err := json.Marshal(input.Body.WorkOutcomes)
 			if err != nil {
-				return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_proof", map[string]any{"error": err.Error()})
+				return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_outcomes", map[string]any{"error": err.Error()})
 			}
 			asStr := string(b)
-			opts.WorkProofJSON = &asStr
+			opts.WorkOutcomesJSON = &asStr
 		}
 		t, err := e.CreateTask(ctx, opts)
 		if err != nil {
@@ -826,17 +819,17 @@ func registerTasks(api huma.API, e engine.Engine) {
 			opts.ParentProvided = true
 			opts.SetParent = input.Body.ParentID
 		}
-		if _, ok := bodyMap["work_proof"]; ok {
-			opts.WorkProofSet = true
-			if input.Body.WorkProof == nil {
-				opts.ClearWorkProof = true
+		if _, ok := bodyMap["work_outcomes"]; ok {
+			opts.WorkOutcomesSet = true
+			if input.Body.WorkOutcomes == nil {
+				opts.ClearWorkOutcomes = true
 			} else {
-				data, err := json.Marshal(input.Body.WorkProof)
+				data, err := json.Marshal(input.Body.WorkOutcomes)
 				if err != nil {
-					return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_proof", map[string]any{"error": err.Error()})
+					return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_outcomes", map[string]any{"error": err.Error()})
 				}
 				asStr := string(data)
-				opts.SetWorkProof = &asStr
+				opts.SetWorkOutcomes = &asStr
 			}
 		}
 		opts.AddDeps = input.Body.AddDependsOn
@@ -850,15 +843,8 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if rawValidation, ok := bodyMap["validation"]; ok {
 			opts.PolicyOverride = true
 			if isNullRaw(rawValidation) {
-				opts.ValidationModeSet = true
-				opts.ValidationMode = "none"
 				opts.RequiredKindsSet = true
 				opts.RequiredKinds = nil
-				var validationMap map[string]json.RawMessage
-				_ = json.Unmarshal(rawValidation, &validationMap)
-				if _, present := validationMap["threshold"]; present {
-					opts.ThresholdSet = true
-				}
 			} else {
 				var validationMap map[string]json.RawMessage
 				_ = json.Unmarshal(rawValidation, &validationMap)
@@ -872,20 +858,6 @@ func registerTasks(api huma.API, e engine.Engine) {
 						validation = &parsed
 					}
 				}
-				if rawMode, present := validationMap["mode"]; present {
-					if isNullRaw(rawMode) {
-						return nil, newAPIError(http.StatusBadRequest, "bad_request", "validation.mode must be string", map[string]any{"field": "validation.mode", "reason": "must be string"})
-					}
-					opts.ValidationModeSet = true
-					if validation != nil && validation.Mode != nil {
-						opts.ValidationMode = *validation.Mode
-					} else {
-						var parsedMode string
-						if err := json.Unmarshal(rawMode, &parsedMode); err == nil {
-							opts.ValidationMode = parsedMode
-						}
-					}
-				}
 				if _, present := validationMap["require"]; present {
 					opts.RequiredKindsSet = true
 					if validation != nil {
@@ -897,36 +869,11 @@ func registerTasks(api huma.API, e engine.Engine) {
 						}
 					}
 				}
-				if _, present := validationMap["threshold"]; present {
-					opts.ThresholdSet = true
-					if validation != nil {
-						opts.Threshold = validation.Threshold
-					} else {
-						var parsedThreshold int
-						if err := json.Unmarshal(validationMap["threshold"], &parsedThreshold); err == nil {
-							opts.Threshold = &parsedThreshold
-						}
-					}
-				}
-				if opts.ValidationMode == "threshold" && opts.Threshold == nil {
-					return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
-				}
 			}
 		} else if input.Body.Validation != nil {
 			opts.PolicyOverride = true
-			if input.Body.Validation.Mode != nil {
-				opts.ValidationModeSet = true
-				opts.ValidationMode = *input.Body.Validation.Mode
-			}
 			opts.RequiredKindsSet = true
 			opts.RequiredKinds = input.Body.Validation.Require
-			if input.Body.Validation.Threshold != nil {
-				opts.ThresholdSet = true
-				opts.Threshold = input.Body.Validation.Threshold
-			}
-			if opts.ValidationMode == "threshold" && opts.Threshold == nil {
-				return nil, newAPIError(http.StatusBadRequest, "bad_request", "threshold required for validation.mode=threshold", nil)
-			}
 		}
 		t, err := e.UpdateTask(ctx, opts)
 		if err != nil {
@@ -939,6 +886,8 @@ func registerTasks(api huma.API, e engine.Engine) {
 			Body TaskResponse `json:"body"`
 		}{Body: taskResponse(t)}, nil
 	})
+
+	registerWorkOutcomesUpdates(api, e)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "complete-task",
@@ -968,15 +917,15 @@ func registerTasks(api huma.API, e engine.Engine) {
 		if authErr != nil {
 			return nil, authErr
 		}
-		if input.Body.WorkProof == nil {
-			return nil, newAPIError(http.StatusBadRequest, "bad_request", "work_proof is required", nil)
+		if input.Body.WorkOutcomes == nil {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "work_outcomes is required", nil)
 		}
-		data, err := json.Marshal(input.Body.WorkProof)
+		data, err := json.Marshal(input.Body.WorkOutcomes)
 		if err != nil {
-			return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_proof", map[string]any{"error": err.Error()})
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "invalid work_outcomes", map[string]any{"error": err.Error()})
 		}
-		workProof := string(data)
-		t, err := e.TaskDone(ctx, input.ID, workProof, actorID, input.Force)
+		workOutcomes := string(data)
+		t, err := e.TaskDone(ctx, input.ID, workOutcomes, actorID, input.Force)
 		if err != nil {
 			return nil, handleError(err)
 		}
@@ -1146,6 +1095,187 @@ func registerTasks(api huma.API, e engine.Engine) {
 		return &struct {
 			Body ValidationStatusResponse `json:"body"`
 		}{Body: status}, nil
+	})
+}
+
+func registerWorkOutcomesUpdates(api huma.API, e engine.Engine) {
+	registerWorkOutcomesAppend(api, e)
+	registerWorkOutcomesPut(api, e)
+	registerWorkOutcomesMerge(api, e)
+}
+
+func registerWorkOutcomesAppend(api huma.API, e engine.Engine) {
+	huma.Register(api, huma.Operation{
+		OperationID: "append-task-work-outcomes",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/tasks/{id}/work-outcomes/append",
+		Summary:     "Append work outcomes entry",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusInternalServerError,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string                    `path:"project_id"`
+		ID        string                    `path:"id"`
+		Body      WorkOutcomesAppendRequest `json:"body"`
+	}) (*struct {
+		Body WorkOutcomesUpdateResponse `json:"body"`
+	}, error) {
+		if len(bodyBytes(ctx)) == 0 {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		path := strings.TrimSpace(input.Body.Path)
+		if path == "" {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "path is required", map[string]any{"field": "path"})
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		task, length, err := mutateWorkOutcomes(ctx, e, projectID, input.ID, actorID, func(workOutcomes map[string]any) (*int, error) {
+			existing, ok := workOutcomes[path]
+			if !ok || existing == nil {
+				workOutcomes[path] = []any{input.Body.Value}
+				l := 1
+				return &l, nil
+			}
+			list, ok := existing.([]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid work_outcomes.%s: must be array", path)
+			}
+			list = append(list, input.Body.Value)
+			workOutcomes[path] = list
+			l := len(list)
+			return &l, nil
+		})
+		if err != nil {
+			return nil, handleError(err)
+		}
+		resp := WorkOutcomesUpdateResponse{
+			Path:         path,
+			WorkOutcomes: taskResponse(task).WorkOutcomes,
+			Length:       length,
+		}
+		return &struct {
+			Body WorkOutcomesUpdateResponse `json:"body"`
+		}{Body: resp}, nil
+	})
+}
+
+func registerWorkOutcomesPut(api huma.API, e engine.Engine) {
+	huma.Register(api, huma.Operation{
+		OperationID: "put-task-work-outcomes",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/tasks/{id}/work-outcomes/put",
+		Summary:     "Set a work outcomes value",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusInternalServerError,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string                 `path:"project_id"`
+		ID        string                 `path:"id"`
+		Body      WorkOutcomesPutRequest `json:"body"`
+	}) (*struct {
+		Body WorkOutcomesUpdateResponse `json:"body"`
+	}, error) {
+		if len(bodyBytes(ctx)) == 0 {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		path := strings.TrimSpace(input.Body.Path)
+		if path == "" {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "path is required", map[string]any{"field": "path"})
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		task, _, err := mutateWorkOutcomes(ctx, e, projectID, input.ID, actorID, func(workOutcomes map[string]any) (*int, error) {
+			workOutcomes[path] = input.Body.Value
+			return nil, nil
+		})
+		if err != nil {
+			return nil, handleError(err)
+		}
+		resp := WorkOutcomesUpdateResponse{
+			Path:         path,
+			WorkOutcomes: taskResponse(task).WorkOutcomes,
+		}
+		return &struct {
+			Body WorkOutcomesUpdateResponse `json:"body"`
+		}{Body: resp}, nil
+	})
+}
+
+func registerWorkOutcomesMerge(api huma.API, e engine.Engine) {
+	huma.Register(api, huma.Operation{
+		OperationID: "merge-task-work-outcomes",
+		Method:      http.MethodPost,
+		Path:        "/projects/{project_id}/tasks/{id}/work-outcomes/merge",
+		Summary:     "Merge a work outcomes object",
+		Errors: []int{
+			http.StatusBadRequest,
+			http.StatusForbidden,
+			http.StatusNotFound,
+			http.StatusConflict,
+			http.StatusInternalServerError,
+		},
+	}, func(ctx context.Context, input *struct {
+		ProjectID string                   `path:"project_id"`
+		ID        string                   `path:"id"`
+		Body      WorkOutcomesMergeRequest `json:"body"`
+	}) (*struct {
+		Body WorkOutcomesUpdateResponse `json:"body"`
+	}, error) {
+		if len(bodyBytes(ctx)) == 0 {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "body required", nil)
+		}
+		path := strings.TrimSpace(input.Body.Path)
+		if path == "" {
+			return nil, newAPIError(http.StatusBadRequest, "bad_request", "path is required", map[string]any{"field": "path"})
+		}
+		actorID, authErr := actorIDFromContext(ctx)
+		if authErr != nil {
+			return nil, authErr
+		}
+		projectID := projectFromPathOrHeader(ctx, input.ProjectID, e.Config.Project.ID)
+		task, _, err := mutateWorkOutcomes(ctx, e, projectID, input.ID, actorID, func(workOutcomes map[string]any) (*int, error) {
+			if input.Body.Value == nil {
+				return nil, fmt.Errorf("invalid work_outcomes.%s: value must be object", path)
+			}
+			existing, ok := workOutcomes[path]
+			if !ok || existing == nil {
+				workOutcomes[path] = input.Body.Value
+				return nil, nil
+			}
+			obj, ok := existing.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid work_outcomes.%s: must be object", path)
+			}
+			for k, v := range input.Body.Value {
+				obj[k] = v
+			}
+			workOutcomes[path] = obj
+			return nil, nil
+		})
+		if err != nil {
+			return nil, handleError(err)
+		}
+		resp := WorkOutcomesUpdateResponse{
+			Path:         path,
+			WorkOutcomes: taskResponse(task).WorkOutcomes,
+		}
+		return &struct {
+			Body WorkOutcomesUpdateResponse `json:"body"`
+		}{Body: resp}, nil
 	})
 }
 
@@ -1759,6 +1889,75 @@ func isNullRaw(raw json.RawMessage) bool {
 	return len(trimmed) > 0 && bytes.Equal(trimmed, []byte("null"))
 }
 
+func parseWorkOutcomesMap(raw *string) (map[string]any, error) {
+	if raw == nil || *raw == "" {
+		return map[string]any{}, nil
+	}
+	var tmp any
+	if err := json.Unmarshal([]byte(*raw), &tmp); err != nil {
+		return nil, fmt.Errorf("invalid work_outcomes: %w", err)
+	}
+	obj, ok := tmp.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid work_outcomes: must be object")
+	}
+	return obj, nil
+}
+
+func mutateWorkOutcomes(
+	ctx context.Context,
+	e engine.Engine,
+	projectID string,
+	taskID string,
+	actorID string,
+	mutate func(map[string]any) (*int, error),
+) (domain.Task, *int, error) {
+	if err := requirePermission(ctx, e, projectID, "task.update"); err != nil {
+		return domain.Task{}, nil, err
+	}
+	task, err := e.Repo.GetTask(ctx, taskID)
+	if err != nil {
+		return domain.Task{}, nil, err
+	}
+	if !projectMatches(projectID, task.ProjectID) {
+		return domain.Task{}, nil, repo.ErrNotFound
+	}
+	if _, err := e.ClaimLease(ctx, taskID, actorID, 60); err != nil {
+		return domain.Task{}, nil, err
+	}
+	defer func() {
+		_ = e.ReleaseLease(ctx, taskID, actorID)
+	}()
+	task, err = e.Repo.GetTask(ctx, taskID)
+	if err != nil {
+		return domain.Task{}, nil, err
+	}
+	workOutcomes, err := parseWorkOutcomesMap(task.WorkOutcomesJSON)
+	if err != nil {
+		return domain.Task{}, nil, err
+	}
+	length, err := mutate(workOutcomes)
+	if err != nil {
+		return domain.Task{}, nil, err
+	}
+	data, err := json.Marshal(workOutcomes)
+	if err != nil {
+		return domain.Task{}, nil, fmt.Errorf("invalid work_outcomes: %w", err)
+	}
+	encoded := string(data)
+	opts := engine.TaskUpdateOptions{
+		ID:              taskID,
+		ActorID:         actorID,
+		WorkOutcomesSet: true,
+		SetWorkOutcomes: &encoded,
+	}
+	updated, err := e.UpdateTask(ctx, opts)
+	if err != nil {
+		return domain.Task{}, nil, err
+	}
+	return updated, length, nil
+}
+
 func normalizeLimit(in int) int {
 	if in <= 0 {
 		return 50
@@ -1823,16 +2022,13 @@ func toJSONArray(items []string) string {
 }
 
 func taskValidationStatus(ctx context.Context, r repo.Repo, t domain.Task) (ValidationStatusResponse, error) {
-	mode := defaultMode(t.ValidationMode)
 	required := decodeStringSlice(t.RequiredAttestationsJSON)
 	resp := ValidationStatusResponse{
-		Mode:      mode,
-		Required:  nonNilSlice(required),
-		Threshold: t.RequiredThreshold,
-		Present:   []string{},
-		Missing:   []string{},
+		Required: nonNilSlice(required),
+		Present:  []string{},
+		Missing:  []string{},
 	}
-	if mode == "none" || len(required) == 0 {
+	if len(required) == 0 {
 		resp.Satisfied = true
 		return resp, nil
 	}
@@ -1855,20 +2051,7 @@ func taskValidationStatus(ctx context.Context, r repo.Repo, t domain.Task) (Vali
 			resp.Missing = append(resp.Missing, req)
 		}
 	}
-	switch mode {
-	case "all":
-		resp.Satisfied = len(resp.Missing) == 0
-	case "any":
-		resp.Satisfied = len(resp.Present) > 0
-	case "threshold":
-		if resp.Threshold == nil {
-			resp.Satisfied = false
-		} else {
-			resp.Satisfied = len(resp.Present) >= *resp.Threshold
-		}
-	default:
-		resp.Satisfied = true
-	}
+	resp.Satisfied = len(resp.Missing) == 0
 	return resp, nil
 }
 
